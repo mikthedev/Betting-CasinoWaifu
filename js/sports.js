@@ -611,6 +611,8 @@
 
   bus?.on("betting:ready", startOddsTicker);
 
+  if (window.Betting) startOddsTicker();
+
   window.Sports = {
     handleBetIntent,
     handleBestPlayerIntent,
