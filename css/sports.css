@@ -286,6 +286,14 @@
   background: var(--green-dim);
   border-color: var(--border-accent);
 }
+.player-odds-btn.yuki-suggested {
+  background: rgba(29, 185, 106, 0.12);
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(29, 185, 106, 0.35);
+}
+.player-odds-btn.selected.yuki-suggested {
+  box-shadow: 0 0 0 2px rgba(29, 185, 106, 0.45);
+}
 .player-odds-btn.yuki-fill {
   animation: yukiFill 0.5s ease forwards;
 }

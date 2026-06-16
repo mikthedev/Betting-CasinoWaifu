@@ -23,6 +23,7 @@
 
   function buildBettingMetadata(overrides = {}) {
     const best = window.Sports?.getBestPlayer?.();
+    const roster = window.Sports?.getRosterMetadata?.() ?? {};
     return {
       app: "betting-casinowaifu",
       balance: window.Betting?.getBalance?.() ?? 0,
@@ -30,6 +31,10 @@
       best_player: best?.player?.fullName ?? null,
       best_odds: best?.player?.odds ?? null,
       tournament: window.Sports?.getActiveTournament?.() ?? best?.match?.tournament ?? null,
+      available_tournaments: roster.tournaments ?? [],
+      available_player_names: roster.player_names ?? [],
+      available_matches: roster.matches ?? [],
+      roster_rules: "Only suggest or fill bets for players in available_player_names. Never invent players.",
       ...overrides,
     };
   }

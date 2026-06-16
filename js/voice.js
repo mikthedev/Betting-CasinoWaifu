@@ -1341,6 +1341,18 @@
   // ---------------------------------------------------------------------------
   // Generic context injection — any system text → Yuki's context window
   // ---------------------------------------------------------------------------
+  function sendContextSilent(text) {
+    if (!isTransportOpen() || !sessionReady) return;
+    sendJson({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "system",
+        content: [{ type: "input_text", text }],
+      },
+    });
+  }
+
   function sendContext(text) {
     if (!isTransportOpen() || !sessionReady) return;
     sendJson({
@@ -1536,6 +1548,7 @@
     notifyGameEvent,
     reactToGameEvent,
     sendContext,
+    sendContextSilent,
     isInConversation,
     getConversationVibe,
     requestMic,

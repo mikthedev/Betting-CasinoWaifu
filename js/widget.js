@@ -669,9 +669,18 @@
       const t = text.toLowerCase();
 
       if (window.Sports) {
-        if (window.Sports.flowState === "awaiting_pick_confirm") {
-          const isConfirm = /\b(yes|sure|ok|okay|go ahead|do it|confirm|fill|yep|yeah|sounds good|let('s| us)|perfect|great)\b/.test(t);
-          if (isConfirm) { window.Sports.handleConfirmIntent(); return; }
+        if (window.Sports.isSwitchPlayerIntent?.(t)) {
+          window.Sports.handleSwitchPlayerIntent();
+          return;
+        }
+
+        if (window.Sports.handleVoicePlayerIntent?.(t)) {
+          return;
+        }
+
+        if (window.Sports.isConfirmIntent?.(t)) {
+          window.Sports.handleConfirmIntent(t);
+          return;
         }
 
         const tournament = window.Sports.findTournamentBySpeech?.(t);
@@ -680,14 +689,17 @@
           return;
         }
 
-        const namedPlayer = window.Sports.findPlayerByName?.(t);
-        if (namedPlayer && /\b(bet|pick|choose|want|go with|on|back)\b/.test(t)) {
-          window.Sports.handleNamedPlayerIntent(namedPlayer.matchId, namedPlayer.playerId);
-          return;
+        if (/\b(bet|pick|choose|want|go with|on|back)\b/.test(t)) {
+          const unknown = window.Sports.findUnknownPlayerMention?.(t);
+          if (unknown) {
+            window.Sports.handleUnknownPlayerIntent(unknown);
+            return;
+          }
         }
         const isBestQuery  = /\b(best|recommend|top|who|suggest|favor|favourite|favorite|advise|should|performing|winning|good|strong)\b/.test(t);
-        const hasBetContext = /\b(bet|player|pick|win|odds|choice|go|choose|on|money)\b/.test(t);
-        if ((isBestQuery || hasBetContext) && window.Sports.flowState === "idle") {
+        const wantsRecommendation = isBestQuery
+          || /\b(recommend|suggestion|who should|best pick|top pick|your pick)\b/.test(t);
+        if (wantsRecommendation && !window.Sports.hasUserPlayerLock?.()) {
           window.Sports.handleBestPlayerIntent();
           return;
         }
