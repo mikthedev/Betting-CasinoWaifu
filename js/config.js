@@ -4,6 +4,14 @@
 
 window.YUKI_CONFIG = {
   // ---------------------------------------------------------------------------
+  // INWORLD ROUTER — chat completions (server proxy, key never in browser)
+  // ---------------------------------------------------------------------------
+  ROUTER: {
+    model: "inworld/yuki-for-betting",
+    chatUrl: null, // null = same-origin /api/chat/completions
+  },
+
+  // ---------------------------------------------------------------------------
   // INWORLD REALTIME — WebSocket proxy (API key lives on the server only)
   // ---------------------------------------------------------------------------
   REALTIME: {
@@ -18,7 +26,13 @@ window.YUKI_CONFIG = {
   EVENT_SYSTEM: {
     channel: "betting-casinowaifu",
     debug: true,
-    idleTimeoutMs: 18000,
+    idleTimeoutMs: 22000,
+    userSilenceMs: 20000,
+    silencePromptCooldownMs: 55000,
+    conversationGraceMs: 18000,
+    deepConversationGraceMs: 28000,
+    agentSpeechGraceMs: 9000,
+    outcomeVoiceCooldownMs: 10000,
   },
 
   // ---------------------------------------------------------------------------

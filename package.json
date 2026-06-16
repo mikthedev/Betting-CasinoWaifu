@@ -10,7 +10,8 @@
     "test:realtime": "node scripts/test-realtime.mjs",
     "test:jwt": "node scripts/test-jwt.mjs",
     "test:remote": "node scripts/test-remote-voice.mjs",
-    "test:greeting": "node scripts/test-greeting.mjs"
+    "test:greeting": "node scripts/test-greeting.mjs",
+    "test:router": "node scripts/test-router.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

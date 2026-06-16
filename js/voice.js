@@ -12,7 +12,7 @@
  *   Voice.isConnected()
  *   Voice.setMuted(bool)         mute agent audio output only
  *   Voice.isMuted()
- *   Voice.notifyGameEvent(type, payload)  inject tennis bet context (silent)
+ *   Voice.notifyGameEvent(type, payload)  inject roulette context (silent)
  *
  * EventBus events:
  *   voice:connecting / voice:ready / voice:closed / voice:error
@@ -20,6 +20,8 @@
  *   voice:thinking:start / voice:thinking:stop
  *   voice:speaking:start / voice:speaking:stop
  *   voice:transcript  { text, role }
+ *   voice:sentiment   { emotion, midResponse? }
+ *   voice:vibe        { vibe, previous? }
  *   voice:level  { level }
  *   voice:muted  { muted }
  */
@@ -35,6 +37,8 @@
   let pc = null;
   let dc = null;
   let remoteAudioEl = null;
+  let voiceGainNode = null;
+  let voiceOutputVolume = (cfg.VOICE && cfg.VOICE.volume) ?? 1;
   let connected = false;
   let sessionReady = false;
   let muted = false;
@@ -46,6 +50,7 @@
   let levelRAF = null;
   let agentSpeaking = false;
   let userSpeaking = false;
+  let currentResponseText = "";
   let audioUnlocked = false;
   let greetingSent = false;
   let connectPromise = null;
@@ -55,7 +60,352 @@
   let scheduledSources = [];
   let nextPlayTime = 0;
 
+  // Deferred speaking-stop for WebSocket path
+  let speakingStopTimer = null;
+
+  // WebRTC: level-driven speaking state (driven by actual remote audio RMS)
+  let remoteAnalyser = null;
+  let remoteAnalyserSrc = null;
+  let webrtcLevelWatcher = null;
+  let webrtcAgentTalking = false;
+
+  // Interaction priority — conversation beats small wins
+  let lastUserSpeechAt = 0;
+  let lastAgentSpeechEndAt = 0;
+  let lastSilencePromptAt = 0;
+  let lastOutcomeVoiceAt = 0;
+  let silenceTimer = null;
+  let conversationVibe = "happy";
+
+  const HUGE_EVENTS = new Set([]);
+  const OUTCOME_EVENTS = new Set(["WIN", "LOSE"]);
+  const AMBIENT_EVENTS = new Set(["IDLE"]);
+
   const emit = (name, data) => bus && bus.emit(name, data);
+
+  function conversationGraceMs() {
+    const base = cfg.EVENT_SYSTEM?.conversationGraceMs ?? 18000;
+    if (conversationVibe === "sad" || conversationVibe === "worried") {
+      return cfg.EVENT_SYSTEM?.deepConversationGraceMs ?? 28000;
+    }
+    return base;
+  }
+
+  function agentSpeechGraceMs() {
+    return cfg.EVENT_SYSTEM?.agentSpeechGraceMs ?? 9000;
+  }
+
+  function outcomeVoiceCooldownMs() {
+    return cfg.EVENT_SYSTEM?.outcomeVoiceCooldownMs ?? 10000;
+  }
+
+  function isDeepConversation() {
+    return conversationVibe === "sad" || conversationVibe === "worried";
+  }
+
+  function getConversationVibe() {
+    return conversationVibe;
+  }
+
+  function isInConversation() {
+    const now = Date.now();
+    if (userSpeaking || agentSpeaking) return true;
+    if (lastUserSpeechAt && now - lastUserSpeechAt < conversationGraceMs()) return true;
+    if (lastAgentSpeechEndAt && now - lastAgentSpeechEndAt < agentSpeechGraceMs()) return true;
+    return false;
+  }
+
+  function isHugeEvent(type) {
+    return HUGE_EVENTS.has(type);
+  }
+
+  function injectUserPrompt(text) {
+    if (!isTransportOpen() || !sessionReady || muted) return false;
+    if (agentSpeaking) {
+      interruptPlayback();
+      if (isTransportOpen()) sendJson({ type: "response.cancel" });
+    }
+    userSpeaking = false;
+    sendJson({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text }],
+      },
+    });
+    sendJson({ type: "response.create" });
+    return true;
+  }
+
+  function startSilenceWatcher() {
+    stopSilenceWatcher();
+    const tickMs = 5000;
+    silenceTimer = setInterval(() => {
+      if (!sessionReady || muted || agentSpeaking || userSpeaking) return;
+      if (isInConversation()) return;
+      const now = Date.now();
+      const userQuiet = !lastUserSpeechAt || now - lastUserSpeechAt >= (cfg.EVENT_SYSTEM?.userSilenceMs ?? 20000);
+      const yukiQuiet = !lastAgentSpeechEndAt || now - lastAgentSpeechEndAt >= 14000;
+      const promptGap = now - lastSilencePromptAt >= (cfg.EVENT_SYSTEM?.silencePromptCooldownMs ?? 55000);
+      if (userQuiet && yukiQuiet && promptGap) {
+        promptSilenceBreak();
+      }
+    }, tickMs);
+  }
+
+  function stopSilenceWatcher() {
+    if (silenceTimer) {
+      clearInterval(silenceTimer);
+      silenceTimer = null;
+    }
+  }
+
+  function promptSilenceBreak() {
+    if (!isTransportOpen() || muted || isInConversation()) return false;
+    lastSilencePromptAt = Date.now();
+
+    const promptsByVibe = {
+      sad: [
+        "[Quiet moment. They were down earlier — one warm beat, then something cozy or fun to lift the mood. Upbeat, not somber. Max 12 words.]",
+        "[Still hanging out. Playful or cozy check-in — find the fun angle. Max 12 words.]",
+      ],
+      worried: [
+        "[They seemed stressed. Reassure with a smile — light, optimistic, maybe a tiny joke. Max 12 words.]",
+        "[Quiet at the betting screen. Upbeat 'we got this' energy — warm, not heavy. Max 12 words.]",
+      ],
+      playful: [
+        "[Quiet moment. Playful nudge — tease lightly or wonder what they're thinking. Max 12 words.]",
+        "[They went silent. Something fun and curious — keep it light. Max 12 words.]",
+      ],
+      happy: [
+        "[Quiet moment. Warm curious question — their day, a game, music, anything fun. Max 12 words.]",
+        "[Still hanging out. Wonder what they're up to — cozy and curious. Max 12 words.]",
+      ],
+      excited: [
+        "[Quiet after some hype. Keep energy up but ask something genuine. Max 12 words.]",
+      ],
+      neutral: [
+        "[It's been quiet. Bright, playful question — their day, a game, anime, music, anything fun. Max 12 words.]",
+        "[Quiet moment at the tennis betting screen. Tease lightly or wonder what match they're eyeing — upbeat, not needy. Max 12 words.]",
+        "[They went silent. Something fun and curious — keep your smile on. Max 12 words.]",
+        "[Still here together. Wonder who they'd bet on next — warm and excited. Max 12 words.]",
+      ],
+    };
+
+    const pool = promptsByVibe[conversationVibe] || promptsByVibe.neutral;
+    return injectUserPrompt(pool[Math.floor(Math.random() * pool.length)]);
+  }
+
+  function promptIdleConversation() {
+    if (!isTransportOpen() || muted || isInConversation()) return false;
+    const now = Date.now();
+    if (now - lastSilencePromptAt < (cfg.EVENT_SYSTEM?.silencePromptCooldownMs ?? 55000)) return false;
+    lastSilencePromptAt = now;
+
+    const idleByVibe = {
+      sad: "[Player is idle. Upbeat cozy opener — something fun to lift the vibe. Max 12 words.]",
+      worried: "[Player is idle. Cheerful check-in — warm optimism, light energy. Max 12 words.]",
+      playful: "[Player is idle. Playful tennis betting question to start chatting. Max 12 words.]",
+      happy: "[Player is idle. Bright curious question — favorite player, tournament, or something fun. Max 12 words.]",
+      excited: "[Player is idle. Hyped question to start a chat. Max 12 words.]",
+      neutral: "[Player is idle at the tennis betting screen. Bright friendly question — a match, player, anime, music, anything fun. Max 12 words.]",
+    };
+
+    return injectUserPrompt(idleByVibe[conversationVibe] || idleByVibe.neutral);
+  }
+
+  function emitSpeakingStop() {
+    if (speakingStopTimer) {
+      clearTimeout(speakingStopTimer);
+      speakingStopTimer = null;
+    }
+    emit("voice:speaking:stop");
+    emit("voice:thinking:stop");
+    if (!userSpeaking) emit("voice:listening:stop");
+    lastAgentSpeechEndAt = Date.now();
+  }
+
+  function deferSpeakingStopWS() {
+    if (!playbackCtx || nextPlayTime <= playbackCtx.currentTime) {
+      emitSpeakingStop();
+      return;
+    }
+    const delayMs = Math.ceil((nextPlayTime - playbackCtx.currentTime) * 1000) + 200;
+    speakingStopTimer = setTimeout(emitSpeakingStop, delayMs);
+  }
+
+  function estimateSpeakDuration(text) {
+    const words = (text || "").trim().split(/\s+/).filter(Boolean).length;
+    const WPM = 155;
+    const base = words > 0 ? Math.ceil((words / WPM) * 60 * 1000) : 3000;
+    return Math.max(base + 1000, 2000);
+  }
+
+  function startWebRTCLevelWatcher() {
+    stopWebRTCLevelWatcher();
+    if (!remoteAnalyser) return;
+
+    if (playbackCtx && playbackCtx.state === "suspended") {
+      playbackCtx.resume().catch(() => {});
+    }
+
+    const data = new Uint8Array(remoteAnalyser.frequencyBinCount);
+    const RISE_RMS = 3;
+    const MAX_WAIT = 8000;
+    const startedAt = Date.now();
+
+    webrtcLevelWatcher = setInterval(() => {
+      if (!remoteAnalyser) {
+        stopWebRTCLevelWatcher();
+        return;
+      }
+
+      if (!webrtcAgentTalking && Date.now() - startedAt > MAX_WAIT) {
+        stopWebRTCLevelWatcher();
+        return;
+      }
+
+      if (webrtcAgentTalking) {
+        stopWebRTCLevelWatcher();
+        return;
+      }
+
+      remoteAnalyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const d = data[i] - 128;
+        sum += d * d;
+      }
+      const rms = Math.sqrt(sum / data.length);
+
+      if (rms > RISE_RMS) {
+        webrtcAgentTalking = true;
+        agentSpeaking = true;
+        emit("voice:thinking:stop");
+        emit("voice:speaking:start");
+        stopWebRTCLevelWatcher();
+      }
+    }, 50);
+  }
+
+  function scheduleSpeakingStop(text) {
+    if (speakingStopTimer) {
+      clearTimeout(speakingStopTimer);
+      speakingStopTimer = null;
+    }
+    const delayMs = estimateSpeakDuration(text);
+    speakingStopTimer = setTimeout(() => {
+      webrtcAgentTalking = false;
+      agentSpeaking = false;
+      emitSpeakingStop();
+    }, delayMs);
+  }
+
+  function stopWebRTCLevelWatcher() {
+    if (webrtcLevelWatcher) {
+      clearInterval(webrtcLevelWatcher);
+      webrtcLevelWatcher = null;
+    }
+  }
+
+  /** Lightweight keyword sentiment for Yuki's spoken response text — bias toward upbeat sprites. */
+  function detectSentiment(text) {
+    const t = (text || "").toLowerCase();
+
+    if (/\b(haha|hehe|lol|lmao|heehee|aha+ha|bwaha|pfft|teehee|giggl|snort)\b|ha{3,}|he{3,}/.test(t))
+      return "excited";
+
+    if (/\b(jackpot|huge|incredible|insane|omg|oh my god|oh my gosh|amazing|unbelievable|massive|epic|legendary|woah|wow|no way|eee+|yess+|let'?s go|i can'?t believe|that'?s insane|so good|so cool|blown away|mind.?blown)\b/.test(t))
+      return "excited";
+
+    if (/\b(yay|nice|great|awesome|good job|well done|congrats|congratulations|love (it|that|this|you)|happy|fun|exciting|cool|sweet|fantastic|beautiful|brilliant|wonderful|proud|so proud|love that|good for you|that'?s great|next one|we got this|you got this|almost|so close|unlucky)\b/.test(t))
+      return "happy";
+
+    if (/\b(sorry|that (sucks|hurts)|hang in there|rough time|that'?s rough|oh no|poor (you|thing)|i'?m here|aww+)\b/.test(t))
+      return "happy";
+
+    return null;
+  }
+
+  /** Detect emotional vibe from the player's speech for tone mirroring. */
+  function detectUserVibe(text) {
+    const t = (text || "").toLowerCase();
+    if (!t.trim()) return null;
+
+    if (/\b(depressed|devastated|heartbroken|grief|cried|crying|hopeless|miserable|awful day|worst day|so sad|really sad|lonely|passed away|died|funeral|broke up|breakup|lost my job|fired|feel (empty|lost|numb)|can't stop thinking|miss (him|her|them|you)|i miss)\b/.test(t))
+      return "sad";
+
+    if (/\b(worried|nervous|anxious|stressed|overwhelmed|exhausted|scared|afraid|panic|frustrated|upset|angry|mad at|hard time|struggling|tough|difficult|ugh+|rough day|bad day|feel (bad|down|low))\b/.test(t))
+      return "worried";
+
+    if (/\b(haha|hehe|lol|lmao|teehee|you're funny|silly|just kidding|jk|tease|pfft)\b|ha{3,}/.test(t))
+      return "playful";
+
+    if (/\b(wow|omg|insane|incredible|no way|let's go|yess+|eee+|hype|amazing|unbelievable)\b/.test(t))
+      return "excited";
+
+    if (/\b(good|great|nice|fine|okay|ok|pretty good|not bad|chill|relaxed|better|happy|fun|love it|awesome|yay)\b/.test(t))
+      return "happy";
+
+    return null;
+  }
+
+  function updateConversationVibe(text) {
+    const detected = detectUserVibe(text);
+    if (!detected) return conversationVibe;
+
+    const heavy = conversationVibe === "sad" || conversationVibe === "worried";
+    const light = detected === "happy" || detected === "excited" || detected === "playful";
+
+    if (detected === "sad" || detected === "worried") {
+      conversationVibe = detected;
+    } else if (light || !heavy) {
+      conversationVibe = detected;
+    }
+
+    return conversationVibe;
+  }
+
+  const VIBE_HINTS = {
+    sad: "Player tone: a little down. One brief warm beat — then cozy positivity or a fun distraction. Stay upbeat; do not get somber or tearful.",
+    worried: "Player tone: stressed. Reassure with a smile — optimistic, light, maybe gentle humor. No heavy sympathy.",
+    playful: "Player tone: playful. Grin energy — tease lightly, keep it fun.",
+    happy: "Player tone: happy. Match and amplify — bright, warm, excited.",
+    excited: "Player tone: hyped. Match their energy — celebrate!",
+    neutral: "Player tone: casual. Your default sunshine energy — bright, curious, fun.",
+  };
+
+  function notifyVibeShift(vibe) {
+    if (!isTransportOpen() || !sessionReady) return;
+    const hint = VIBE_HINTS[vibe] || VIBE_HINTS.neutral;
+    sendJson({
+      type: "conversation.item.create",
+      item: {
+        type: "message",
+        role: "system",
+        content: [{ type: "input_text", text: hint }],
+      },
+    });
+  }
+
+  function handleUserTranscript(text) {
+    if (!text) return;
+    lastUserSpeechAt = Date.now();
+    const prevVibe = conversationVibe;
+    const vibe = updateConversationVibe(text);
+    if (vibe !== prevVibe) {
+      notifyVibeShift(vibe);
+      emit("voice:vibe", { vibe, previous: prevVibe });
+      if (window.CharacterMemory) window.CharacterMemory.setUserVibe(vibe);
+    }
+    if (window.CharacterMemory) window.CharacterMemory.addTurn("user", text);
+  }
+
+  function handleYukiTranscript(text) {
+    if (!text) return;
+    if (window.CharacterMemory) window.CharacterMemory.addTurn("yuki", text);
+  }
 
   function backendWsUrl(base) {
     if (!base) return null;
@@ -243,8 +593,21 @@
           remoteAudioEl.setAttribute("playsinline", "");
           document.body.appendChild(remoteAudioEl);
         }
-        remoteAudioEl.srcObject = new MediaStream([e.track]);
+        const remoteStream = new MediaStream([e.track]);
+        remoteAudioEl.srcObject = remoteStream;
+        remoteAudioEl.volume = getVoiceVolume();
         if (remoteAudioEl.paused) remoteAudioEl.play().catch(() => {});
+
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) {
+            if (!playbackCtx) playbackCtx = new Ctx({ latencyHint: "playback" });
+            remoteAnalyserSrc = playbackCtx.createMediaStreamSource(remoteStream);
+            remoteAnalyser = playbackCtx.createAnalyser();
+            remoteAnalyser.fftSize = 256;
+            remoteAnalyserSrc.connect(remoteAnalyser);
+          }
+        } catch (_) {}
       };
 
       pc.onconnectionstatechange = () => {
@@ -409,11 +772,13 @@
         emit("voice:ready");
         resumeMicPipeline();
         maybeStartConversation();
+        startSilenceWatcher();
         onReady();
         break;
 
       case "input_audio_buffer.speech_started":
         userSpeaking = true;
+        lastUserSpeechAt = Date.now();
         interruptPlayback();
         if (isTransportOpen()) {
           sendJson({ type: "response.cancel" });
@@ -429,10 +794,10 @@
         break;
 
       case "response.created":
-        if (transport === "webrtc" && !agentSpeaking) {
-          agentSpeaking = true;
-          emit("voice:thinking:stop");
-          emit("voice:speaking:start");
+        currentResponseText = "";
+        if (transport === "webrtc") {
+          emit("voice:thinking:start");
+          startWebRTCLevelWatcher();
         }
         break;
 
@@ -440,6 +805,7 @@
         if (transport === "webrtc") break;
         if (!agentSpeaking) {
           agentSpeaking = true;
+          currentResponseText = "";
           emit("voice:thinking:stop");
           emit("voice:transcript:reset");
           emit("voice:speaking:start");
@@ -451,21 +817,40 @@
       case "response.output_audio_transcript.delta":
       case "response.output_text.delta":
         if (msg.delta) {
+          currentResponseText += msg.delta;
           emit("voice:transcript", { text: msg.delta, role: "yuki", partial: true });
+          const midSentiment = detectSentiment(currentResponseText);
+          if (midSentiment) emit("voice:sentiment", { emotion: midSentiment, midResponse: true });
         }
         break;
 
-      case "response.done":
-        agentSpeaking = false;
-        emit("voice:speaking:stop");
-        emit("voice:thinking:stop");
-        if (!userSpeaking) emit("voice:listening:stop");
+      case "response.done": {
+        const textSnapshot = currentResponseText;
+        if (textSnapshot) {
+          const sentiment = detectSentiment(textSnapshot);
+          if (sentiment) emit("voice:sentiment", { emotion: sentiment });
+          handleYukiTranscript(textSnapshot);
+          currentResponseText = "";
+        }
+        if (transport === "webrtc") {
+          agentSpeaking = false;
+          if (webrtcAgentTalking || webrtcLevelWatcher) {
+            scheduleSpeakingStop(textSnapshot);
+          } else {
+            emitSpeakingStop();
+          }
+        } else {
+          agentSpeaking = false;
+          deferSpeakingStopWS();
+        }
         break;
+      }
 
       // User speech transcript from Inworld — used for intent detection (betting, etc.)
       case "conversation.item.input_audio_transcription.completed":
         if (msg.transcript) {
           emit("voice:transcript", { text: msg.transcript, role: "user" });
+          handleUserTranscript(msg.transcript);
         }
         break;
 
@@ -482,8 +867,15 @@
   }
 
   function maybeStartConversation() {
-    if (!sessionReady || !audioUnlocked || !micStream || greetingSent) return;
-    if (cfg.MODE !== "companion") return;
+    if (!sessionReady || greetingSent) return;
+    const autoCasino = cfg.MODE !== "companion" && cfg.AUTO_VOICE !== false;
+    if (cfg.MODE === "companion") {
+      if (!micStream || !audioUnlocked) return;
+    } else if (autoCasino) {
+      if (!micStream && !audioUnlocked) return;
+    } else {
+      return;
+    }
     greetingSent = true;
     promptGreeting();
   }
@@ -491,7 +883,7 @@
   function promptGreeting() {
     if (!isTransportOpen()) return;
     const text =
-      "Hey Yuki! I'm on the tennis betting screen — say a quick friendly hello and mention you can help me pick a player!";
+      "Hey Yuki! I'm on the tennis betting screen — say a bright cheerful hello, hype girl energy, and mention you can help me pick a player!";
     sendJson({
       type: "conversation.item.create",
       item: {
@@ -509,15 +901,15 @@
       type: "session.update",
       session: {
         type: "realtime",
-        model: "inworld/llm-playground-export-2026-06-09",
-        instructions: "You are Yuki, a friendly cheerful companion on a voice call.",
+        model: (window.YUKI_CONFIG?.ROUTER?.model) || "inworld/yuki-for-betting",
+        instructions: "You are Yuki on a voice call for tennis betting. Bright, uplifting, short replies. Help with picks and bet slips when asked.",
         output_modalities: ["audio"],
         audio: {
           input: {
             transcription: { model: "assemblyai/u3-rt-pro" },
             turn_detection: {
               type: "semantic_vad",
-              eagerness: "medium",
+              eagerness: "low",
               create_response: true,
               interrupt_response: true,
             },
@@ -549,6 +941,16 @@
       try { remoteAudioEl.remove(); } catch (_) {}
       remoteAudioEl = null;
     }
+    if (speakingStopTimer) {
+      clearTimeout(speakingStopTimer);
+      speakingStopTimer = null;
+    }
+    stopWebRTCLevelWatcher();
+    webrtcAgentTalking = false;
+    try { remoteAnalyserSrc?.disconnect(); } catch (_) {}
+    remoteAnalyserSrc = null;
+    remoteAnalyser = null;
+    currentResponseText = "";
     connected = false;
     sessionReady = false;
     transport = "ws";
@@ -560,9 +962,14 @@
 
   function cleanupSession(emitClosed) {
     stopLevelLoop();
+    stopSilenceWatcher();
     agentSpeaking = false;
     userSpeaking = false;
     greetingSent = false;
+    lastUserSpeechAt = 0;
+    lastAgentSpeechEndAt = 0;
+    lastSilencePromptAt = 0;
+    lastOutcomeVoiceAt = 0;
     if (emitClosed) emit("voice:closed");
   }
 
@@ -659,6 +1066,40 @@
       });
     }
     return audioUnlocked;
+  }
+
+  /** Connect + mic on load; falls back to voice-only until the user taps. */
+  async function tryAutoStart() {
+    if (!isVoiceConfigured()) {
+      return { connected: false, mic: false, reason: "not-configured" };
+    }
+    await ensureRuntimeConfig();
+    try {
+      await unlockAudio();
+    } catch (_) {}
+
+    try {
+      await startSession();
+      maybeStartConversation();
+      return { connected: true, mic: !!micStream };
+    } catch (err) {
+      console.warn("[Voice] auto-start mic failed:", err.message || err);
+      try {
+        await warmSession();
+        try {
+          await unlockAudio();
+        } catch (_) {}
+        maybeStartConversation();
+        return {
+          connected: connected && sessionReady,
+          mic: false,
+          needsGesture: true,
+          error: err.message || String(err),
+        };
+      } catch (fallbackErr) {
+        throw fallbackErr;
+      }
+    }
   }
 
   async function startSession() {
@@ -822,6 +1263,32 @@
   // ---------------------------------------------------------------------------
   // Agent audio playback (PCM16 24kHz mono)
   // ---------------------------------------------------------------------------
+  function getVoiceVolume() {
+    return Math.max(0, Math.min(1.2, voiceOutputVolume));
+  }
+
+  function applyVoiceVolume() {
+    const v = getVoiceVolume();
+    if (voiceGainNode) voiceGainNode.gain.value = v;
+    if (remoteAudioEl) remoteAudioEl.volume = v;
+  }
+
+  function setVoiceVolume(value) {
+    voiceOutputVolume = Math.max(0, Math.min(1.2, Number(value) || 0));
+    applyVoiceVolume();
+    return voiceOutputVolume;
+  }
+
+  function ensureVoiceOutput(ctx) {
+    if (!ctx) return null;
+    if (!voiceGainNode) {
+      voiceGainNode = ctx.createGain();
+      voiceGainNode.connect(ctx.destination);
+      applyVoiceVolume();
+    }
+    return voiceGainNode;
+  }
+
   function playAudioDelta(base64) {
     if (!audioUnlocked) return;
     if (!playbackCtx) playbackCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -839,7 +1306,8 @@
 
     const src = playbackCtx.createBufferSource();
     src.buffer = buffer;
-    src.connect(playbackCtx.destination);
+    const out = ensureVoiceOutput(playbackCtx) || playbackCtx.destination;
+    src.connect(out);
 
     const now = playbackCtx.currentTime;
     if (nextPlayTime < now) nextPlayTime = now + 0.02;
@@ -857,9 +1325,16 @@
     });
     scheduledSources = [];
     nextPlayTime = 0;
+    if (speakingStopTimer) {
+      clearTimeout(speakingStopTimer);
+      speakingStopTimer = null;
+    }
+    stopWebRTCLevelWatcher();
+    webrtcAgentTalking = false;
+    currentResponseText = "";
     if (agentSpeaking) {
       agentSpeaking = false;
-      emit("voice:speaking:stop");
+      emitSpeakingStop();
     }
   }
 
@@ -881,16 +1356,23 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Tennis betting integration — context + spoken reactions when voice is live
+  // Roulette integration — context + spoken reactions when voice is live
   // ---------------------------------------------------------------------------
-  function notifyGameEvent(type, payload = {}) {
+  function notifyGameEvent(type, payload = {}, opts = {}) {
     if (!isTransportOpen() || !sessionReady) return;
+    const inConvo = opts.inConversation ?? isInConversation();
+    const huge = opts.huge ?? isHugeEvent(type);
     const lines = {
-      WIN:  `System: Tennis bet — player won +${payload.amount || payload.net || "?"} credits on ${payload.player || payload.number || "their pick"}.`,
+      WIN:  `System: Tennis bet — player won +${payload.amount || payload.net || "?"} credits on ${payload.player || "their pick"}.`,
       LOSE: `System: Tennis bet — player lost ${payload.amount || payload.chip || "?"} credits on ${payload.player || "their pick"}.`,
       IDLE: `System: The player is browsing tennis matches.`,
     };
-    const text = lines[type] || `System: Betting event ${type}.`;
+    let text = lines[type] || `System: Betting event ${type}.`;
+    if (inConvo && !huge && OUTCOME_EVENTS.has(type)) {
+      text = `Background note (DO NOT mention now — keep the current conversation going naturally): ${text}`;
+    } else if (inConvo && AMBIENT_EVENTS.has(type)) {
+      text = `Background note (ignore for now unless it fits the chat): ${text}`;
+    }
     sendJson({
       type: "conversation.item.create",
       item: {
@@ -901,40 +1383,45 @@
     });
   }
 
-  /** When voice is live, Yuki speaks a brief reaction to a spin outcome. */
+  /** When voice is live, Yuki speaks a brief reaction — respects conversation priority. */
   function reactToGameEvent(type, payload = {}) {
     if (!isTransportOpen() || !sessionReady) return false;
+    if (muted) return false;
 
-    notifyGameEvent(type, payload);
+    if (type === "IDLE") return promptIdleConversation();
 
-    if (type === "IDLE" || muted) return false;
+    const inConvo = isInConversation();
+    const huge = isHugeEvent(type);
+    const isOutcome = OUTCOME_EVENTS.has(type);
+    const isAmbient = AMBIENT_EVENTS.has(type);
 
-    // Casino outcomes take priority over ambient mic / ongoing speech
-    if (agentSpeaking) {
+    notifyGameEvent(type, payload, { inConversation: inConvo, huge });
+
+    if (isAmbient && inConvo) return false;
+    if (inConvo && isOutcome && !huge) return false;
+    if (isDeepConversation() && inConvo && !huge) return false;
+
+    const now = Date.now();
+    if (isOutcome && !huge && now - lastOutcomeVoiceAt < outcomeVoiceCooldownMs()) return false;
+    if ((agentSpeaking || userSpeaking) && !huge) return false;
+
+    if (agentSpeaking && huge) {
       interruptPlayback();
-      if (isTransportOpen()) {
-        sendJson({ type: "response.cancel" });
-      }
+      if (isTransportOpen()) sendJson({ type: "response.cancel" });
     }
     userSpeaking = false;
 
+    const upbeat = " Stay bright and encouraging — no pity, no somber tone.";
+
     const prompts = {
-      WIN:  `[Tennis bet win! +${payload.amount || payload.net} on ${payload.player || "their pick"}. Brief happy hype!]`,
-      LOSE: `[Tennis bet loss — lost ${payload.amount || payload.chip}. Brief supportive reaction, warm.]`,
+      WIN:  `[Tennis bet win! +${payload.amount || payload.net} on ${payload.player || "their pick"}. Brief happy hype — one short line!]${upbeat}`,
+      LOSE: `[Tennis bet loss — lost ${payload.amount || payload.chip}. Quick upbeat encouragement — "next one!" energy, no pity. One line.]${upbeat}`,
     };
     const text = prompts[type];
     if (!text) return false;
 
-    sendJson({
-      type: "conversation.item.create",
-      item: {
-        type: "message",
-        role: "user",
-        content: [{ type: "input_text", text }],
-      },
-    });
-    sendJson({ type: "response.create" });
-    return true;
+    lastOutcomeVoiceAt = now;
+    return injectUserPrompt(text);
   }
 
   function setMuted(value) {
@@ -1031,6 +1518,7 @@
     disconnect,
     ensureSession,
     warmSession,
+    tryAutoStart,
     ensureRuntimeConfig,
     unlockAudio,
     enableMicCapture,
@@ -1048,6 +1536,10 @@
     notifyGameEvent,
     reactToGameEvent,
     sendContext,
+    isInConversation,
+    getConversationVibe,
     requestMic,
+    setVoiceVolume,
+    getVoiceVolume,
   };
 })();

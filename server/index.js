@@ -12,6 +12,12 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { WebSocketServer, WebSocket } from "ws";
+import {
+  buildChatPayload,
+  isRouterConfigured,
+  pipeSseResponse,
+  routerChatFetch,
+} from "../lib/inworld-router.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -54,7 +60,7 @@ function serveStatic(req, res) {
   });
 }
 
-function setCors(req, res) {
+function setCors(req, res, methods = "GET, OPTIONS") {
   const origin = req.headers.origin;
   if (origin) {
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -62,11 +68,81 @@ function setCors(req, res) {
   } else {
     res.setHeader("Access-Control-Allow-Origin", "*");
   }
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", methods);
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
+async function handleRouterChat(req, res) {
+  setCors(req, res, "POST, OPTIONS");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.writeHead(405, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
+  }
+
+  if (!isRouterConfigured()) {
+    res.writeHead(503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "INWORLD_API_KEY is not configured" }));
+    return;
+  }
+
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+
+  let body;
+  try {
+    body = JSON.parse(raw || "{}");
+  } catch {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Invalid JSON body" }));
+    return;
+  }
+
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  if (!messages.length) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "messages array is required" }));
+    return;
+  }
+
+  const stream = body.stream !== false;
+  const metadata =
+    body.metadata && typeof body.metadata === "object" ? body.metadata : undefined;
+
+  try {
+    const payload = buildChatPayload({ messages, metadata, stream, model: body.model });
+    const upstream = await routerChatFetch(payload);
+
+    if (stream) {
+      await pipeSseResponse(upstream, res);
+      return;
+    }
+
+    const json = await upstream.json();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(json));
+  } catch (err) {
+    console.error("[router]", err.message);
+    res.writeHead(502, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err.message || "Router request failed" }));
+  }
+}
+
 const server = http.createServer((req, res) => {
+  const { pathname } = new URL(req.url, `http://${req.headers.host}`);
+
+  if (pathname === "/api/chat/completions") {
+    handleRouterChat(req, res);
+    return;
+  }
+
   if (req.method === "OPTIONS") {
     setCors(req, res);
     res.writeHead(204);
@@ -77,7 +153,7 @@ const server = http.createServer((req, res) => {
   if (req.url === "/health") {
     setCors(req, res);
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, inworld: !!INWORLD_API_KEY }));
+    res.end(JSON.stringify({ ok: true, inworld: !!INWORLD_API_KEY, router: isRouterConfigured() }));
     return;
   }
   serveStatic(req, res);

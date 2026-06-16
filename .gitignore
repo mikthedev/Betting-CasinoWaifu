@@ -21,6 +21,9 @@ Thumbs.db
 # local python tooling
 .pylibs/
 
+# local reference snapshots
+.ref-casinowaifu/
+
 # IDE
 .vscode/
 .idea/

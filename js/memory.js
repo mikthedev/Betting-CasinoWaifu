@@ -36,6 +36,7 @@
       currentStreak: 0, // + for win streak, - for loss streak
       lastOutcome: null,
       lastMood: "idle",
+      userVibe: "happy",
       userName: null,
     },
   });
@@ -133,6 +134,15 @@
     save();
   }
 
+  function setUserVibe(vibe) {
+    state.context.userVibe = vibe || "neutral";
+    save();
+  }
+
+  function getUserVibe() {
+    return state.context.userVibe || "neutral";
+  }
+
   const getContext = () => ({ ...state.context });
   const getRecentTurns = (n = 4) => state.turns.slice(-n);
   const getTopTopic = () => (state.topics.length ? state.topics[0].topic : null);
@@ -148,6 +158,8 @@
     addTurn,
     recordOutcome,
     setMood,
+    setUserVibe,
+    getUserVibe,
     detectTopics,
     getContext,
     getRecentTurns,

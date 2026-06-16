@@ -32,6 +32,11 @@
   let idleTimer       = null;
   let talkPromptTimer = null;
   let reactionUntil   = 0;
+  let userVibe        = "neutral";
+  let talkingStartedAt = 0;
+  let sentimentEmotionUntil = 0;
+  let micGestureBound = false;
+  const MIN_TALKING_MS = 800;
 
   function isMobileOverlay() {
     return window.innerWidth <= 480;
@@ -204,6 +209,7 @@
       if (autoVoice && !userMuted) {
         initCasinoVoice();
         checkVoiceAvailability();
+        startBettingIdle();
       }
     }
   }
@@ -237,19 +243,59 @@
   }
 
   async function initCasinoVoice() {
-    if (userMuted) return;
+    if (userMuted || connecting) return;
     if (window.YUKI_isHosted?.() && !window.YUKI_isVoiceConfigured?.()) return;
+    if (micEnabled && window.Voice.isConnected()) return;
+
+    connecting = true;
+    if (!isHidden && !inGameReaction()) setEmotion(E.THINKING);
+
     try {
       await window.Voice.ensureRuntimeConfig();
-      window.Voice.warmSession().catch(err => { console.warn("[Widget] voice warm failed:", err); scheduleReconnect(); });
+      const result = await window.Voice.tryAutoStart();
       voiceActive = true;
       reconnectAttempt = 0;
       document.body.classList.add("voice-live");
-      if (ui.charWrap) ui.charWrap.title = "Tap Yuki to speak";
+
+      if (result.mic) {
+        micEnabled = true;
+        if (ui.charWrap) ui.charWrap.title = "Talking with Yuki";
+        if (!isHidden && !inGameReaction()) setEmotion(E.LISTENING);
+      } else if (result.needsGesture) {
+        bindMicOnFirstGesture();
+        if (ui.charWrap) ui.charWrap.title = "Tap anywhere to talk with Yuki";
+        if (!isHidden && !inGameReaction()) setEmotion(E.HAPPY);
+      } else if (ui.charWrap) {
+        ui.charWrap.title = "Talking with Yuki";
+      }
     } catch (err) {
       console.warn("[Widget] voice init failed:", err);
       scheduleReconnect();
+    } finally {
+      connecting = false;
     }
+  }
+
+  function bindMicOnFirstGesture() {
+    if (micGestureBound || userMuted) return;
+    micGestureBound = true;
+    const finish = async () => {
+      if (micEnabled || userMuted) return;
+      connecting = true;
+      try {
+        await window.Voice.unlockAudio();
+        await window.Voice.startSession();
+        micEnabled = true;
+        voiceActive = true;
+        if (ui.charWrap) ui.charWrap.title = "Talking with Yuki";
+        if (!isHidden && !inGameReaction()) setEmotion(E.LISTENING);
+      } catch (err) {
+        console.warn("[Widget] mic gesture start failed:", err);
+      } finally {
+        connecting = false;
+      }
+    };
+    document.addEventListener("pointerdown", finish, { once: true, passive: true });
   }
 
   // ── Character tap ─────────────────────────────────────────────────────────────
@@ -445,15 +491,52 @@
 
   // ── Event wiring ─────────────────────────────────────────────────────────────
   function eventClass(type) {
-    const wins  = new Set(["WIN","BIG_WIN","BJ_WIN","BLACKJACK","CRASH_WIN","SLOTS_WIN"]);
-    const jacks = new Set(["BIG_WIN","BLACKJACK","SLOTS_JACKPOT"]);
-    const loses = new Set(["LOSE","BJ_LOSE","BUST","CRASH_LOSE","SLOTS_LOSE"]);
-    if (type === "TALK")        return "talk";
-    if (jacks.has(type))        return "big_win";
-    if (wins.has(type))         return "win";
-    if (loses.has(type))        return "lose";
-    if (type === "HIGH")        return "win";
+    const wins  = new Set(["WIN"]);
+    const loses = new Set(["LOSE"]);
+    if (type === "TALK") return "talk";
+    if (wins.has(type))  return "win";
+    if (loses.has(type)) return "lose";
     return "info";
+  }
+
+  function vibeListeningEmotion(vibe) {
+    const map = {
+      sad: E.HAPPY, worried: E.HAPPY, playful: E.HAPPY,
+      happy: E.HAPPY, excited: E.EXCITED, neutral: E.HAPPY,
+    };
+    return map[vibe] || E.HAPPY;
+  }
+
+  function applyUserVibe(vibe) {
+    userVibe = vibe || "neutral";
+    if (window.CharacterMemory) window.CharacterMemory.setUserVibe(userVibe);
+    if (inGameReaction() || ui.root.classList.contains("speaking")) return;
+    if (ui.root.classList.contains("listening")) {
+      setEmotion(vibeListeningEmotion(userVibe));
+    }
+  }
+
+  function applySentimentEmotion(emotion, midResponse) {
+    const SENTIMENT_MAP = { worried: E.HAPPY, sad: E.HAPPY, excited: E.EXCITED, happy: E.HAPPY };
+    const mapped = SENTIMENT_MAP[emotion];
+    if (!mapped || inGameReaction()) return;
+    if (midResponse) { setEmotion(mapped); return; }
+    sentimentEmotionUntil = Date.now() + 6000;
+    setEmotion(mapped);
+    setTimeout(() => {
+      if (Date.now() < sentimentEmotionUntil) return;
+      if (inGameReaction() || ui.root.classList.contains("speaking")) return;
+      if (ui.root.classList.contains("listening")) setEmotion(vibeListeningEmotion(userVibe));
+      else setEmotion(E.IDLE);
+    }, 6000);
+  }
+
+  function restoreVoiceEmotion() {
+    if (inGameReaction()) return;
+    if (Date.now() < sentimentEmotionUntil) return;
+    if (ui.root.classList.contains("speaking")) setEmotion(E.TALKING);
+    else if (ui.root.classList.contains("listening")) setEmotion(vibeListeningEmotion(userVibe));
+    else setEmotion(E.IDLE);
   }
 
   function showReaction(reaction, eventType, payload = {}) {
@@ -463,36 +546,37 @@
     if (window.CharacterMemory) window.CharacterMemory.setMood(reaction.emotion);
 
     const canVoice  = !userMuted && voiceActive && window.Voice.isConnected();
+    const inConvo   = canVoice && window.Voice.isInConversation?.();
     let voiceReacted = false;
-    if (canVoice && eventType !== "IDLE") {
-      voiceReacted = window.Voice.reactToGameEvent(eventType, payload);
-    } else if (canVoice) {
-      window.Voice.notifyGameEvent(eventType, payload);
+    if (canVoice) {
+      if (eventType === "IDLE") {
+        voiceReacted = window.Voice.reactToGameEvent(eventType, payload);
+      } else {
+        voiceReacted = window.Voice.reactToGameEvent(eventType, payload);
+      }
     }
+
+    const skipToast = inConvo && eventType !== "IDLE";
 
     if (isHidden) {
       toast(eventType === "IDLE" ? "Talk to me" : reaction.line,
             eventType === "IDLE" ? "talk" : eventClass(eventType),
-            eventType === "BIG_WIN" ? 4500 : 3500);
+            3500);
     } else if (isCompanion) {
       toast(reaction.line, eventClass(eventType), 3500);
-    } else if (eventType !== "IDLE" && !voiceReacted) {
-      const bigEvent = ["WIN"].includes(eventType);
-      toast(reaction.line, eventClass(eventType), bigEvent ? 3600 : 2600);
+    } else if (eventType !== "IDLE" && !voiceReacted && !skipToast) {
+      toast(reaction.line, eventClass(eventType), 2600);
     }
 
-    if (!isHidden && eventType !== "IDLE") nudge();
-    if (["WIN"].includes(eventType) && !isHidden) burstConfetti();
+    if (!isHidden && eventType !== "IDLE" && (!inConvo || false)) nudge();
+    if (eventType === "WIN" && !isHidden && !inConvo) burstConfetti();
 
     setTimeout(() => {
       if (inGameReaction()) return;
-      if (voiceActive && !userMuted) {
-        if (ui.root.classList.contains("speaking")) setEmotion(E.TALKING);
-        else if (micEnabled) setEmotion(E.LISTENING);
-        else setEmotion(E.IDLE);
-      } else if (!isHidden) {
-        setEmotion(E.IDLE);
-      }
+      if (ui.root.classList.contains("speaking")) setEmotion(E.TALKING);
+      else if (ui.root.classList.contains("listening")) setEmotion(vibeListeningEmotion(userVibe));
+      else if (Date.now() < sentimentEmotionUntil) return;
+      else setEmotion(E.IDLE);
     }, 3400);
   }
 
@@ -539,25 +623,45 @@
     });
     bus.on("voice:listening:start", () => {
       ui.root.classList.add("listening");
-      if (!isHidden && !inGameReaction()) setEmotion(E.LISTENING);
+      if (!inGameReaction()) setEmotion(vibeListeningEmotion(userVibe));
     });
     bus.on("voice:listening:stop", () => {
       ui.root.classList.remove("listening");
       if (ui.ring) ui.ring.style.setProperty("--lvl", 0);
+      if (!inGameReaction() && !ui.root.classList.contains("speaking")) restoreVoiceEmotion();
     });
     bus.on("voice:thinking:start", () => {
-      if (!isHidden && !inGameReaction()) setEmotion(E.THINKING);
+      if (!inGameReaction()) setEmotion(E.THINKING);
     });
     bus.on("voice:level", ({ level }) => {
       if (ui.ring) ui.ring.style.setProperty("--lvl", level.toFixed(3));
     });
     bus.on("voice:speaking:start", () => {
+      talkingStartedAt = Date.now();
       ui.root.classList.add("speaking");
-      if (!isHidden && !inGameReaction()) setEmotion(E.TALKING);
+      if (!inGameReaction()) setEmotion(E.TALKING);
     });
     bus.on("voice:speaking:stop", () => {
       ui.root.classList.remove("speaking");
-      if (!isHidden && voiceActive && micEnabled && !inGameReaction()) setEmotion(E.LISTENING);
+      if (inGameReaction()) return;
+      if (Date.now() < sentimentEmotionUntil) return;
+      const sinceStart = Date.now() - talkingStartedAt;
+      const remaining = MIN_TALKING_MS - sinceStart;
+      if (remaining > 0) {
+        setTimeout(() => {
+          if (!inGameReaction() && Date.now() >= sentimentEmotionUntil) restoreVoiceEmotion();
+        }, remaining);
+      } else {
+        restoreVoiceEmotion();
+      }
+    });
+
+    bus.on("voice:sentiment", ({ emotion, midResponse }) => {
+      applySentimentEmotion(emotion, midResponse);
+    });
+
+    bus.on("voice:vibe", ({ vibe }) => {
+      applyUserVibe(vibe);
     });
 
     bus.on("voice:transcript", ({ text, role } = {}) => {
@@ -569,6 +673,13 @@
           const isConfirm = /\b(yes|sure|ok|okay|go ahead|do it|confirm|fill|yep|yeah|sounds good|let('s| us)|perfect|great)\b/.test(t);
           if (isConfirm) { window.Sports.handleConfirmIntent(); return; }
         }
+
+        const tournament = window.Sports.findTournamentBySpeech?.(t);
+        if (tournament && window.Sports.isTournamentNavIntent?.(t)) {
+          window.Sports.handleTournamentIntent(tournament);
+          return;
+        }
+
         const namedPlayer = window.Sports.findPlayerByName?.(t);
         if (namedPlayer && /\b(bet|pick|choose|want|go with|on|back)\b/.test(t)) {
           window.Sports.handleNamedPlayerIntent(namedPlayer.matchId, namedPlayer.playerId);
@@ -607,14 +718,31 @@
   }
 
   // ── Companion idle ────────────────────────────────────────────────────────────
-  function startCompanionIdle() {
+  function startIdleCheckIns() {
     const ms = (cfg.EVENT_SYSTEM && cfg.EVENT_SYSTEM.idleTimeoutMs) || 22000;
+    const canShowIdle = () => {
+      if (inGameReaction()) return false;
+      if (Date.now() < sentimentEmotionUntil) return false;
+      if (ui.root?.classList.contains("speaking")) return false;
+      if (ui.root?.classList.contains("listening")) return false;
+      if (Date.now() - talkingStartedAt < 3000) return false;
+      if (window.Voice?.isInConversation?.()) return false;
+      const current = ui.root?.dataset?.emotion;
+      if (current && current !== E.IDLE && current !== E.HAPPY) return false;
+      return true;
+    };
     const tick = () => {
-      if (!voiceActive) { nudge(); showReaction(window.Character.reactToOutcome("IDLE"), "IDLE"); }
+      if (voiceActive && canShowIdle()) {
+        nudge();
+        showReaction(window.Character.reactToOutcome("IDLE"), "IDLE");
+      }
       idleTimer = setTimeout(tick, ms);
     };
     idleTimer = setTimeout(tick, ms);
   }
+
+  function startCompanionIdle() { startIdleCheckIns(); }
+  function startBettingIdle()   { startIdleCheckIns(); }
 
   // ── Emotion / toast / effects ─────────────────────────────────────────────────
   function setEmotion(emotion) {

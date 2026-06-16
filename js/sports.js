@@ -5,7 +5,8 @@
  *   Sports.handleBetIntent()
  *   Sports.handleBestPlayerIntent()
  *   Sports.handleNamedPlayerIntent(matchId, playerId)
- *   Sports.handleConfirmIntent()
+ *   Sports.handleTournamentIntent(tournamentId)
+ *   Sports.findTournamentBySpeech(text)
  */
 (function () {
   const bus = window.EventBus;
@@ -209,13 +210,82 @@
       </button>`
     ).join("");
     tabsEl.querySelectorAll(".tour-tab").forEach(btn => {
-      btn.addEventListener("click", () => {
-        activeTournament = btn.dataset.tour;
-        tabsEl.querySelectorAll(".tour-tab").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        renderMatches();
-      });
+      btn.addEventListener("click", () => selectTournament(btn.dataset.tour));
     });
+  }
+
+  function selectTournament(tournamentId, { scroll = true } = {}) {
+    activeTournament = tournamentId;
+    const tabsEl = document.getElementById("sports-tournament-tabs");
+    tabsEl?.querySelectorAll(".tour-tab").forEach(b => {
+      b.classList.toggle("active", b.dataset.tour === tournamentId);
+    });
+    renderMatches();
+
+    if (!scroll) return;
+
+    const tab = tabsEl?.querySelector(`[data-tour="${tournamentId}"]`);
+    tab?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    tab?.classList.add("tour-tab-flash");
+    setTimeout(() => tab?.classList.remove("tour-tab-flash"), 1400);
+
+    const pool = tournamentId === "all" ? MATCHES : MATCHES.filter(m => m.tournament === tournamentId);
+    const target = pool.find(m => m.status === "live") || pool[0];
+    if (target) {
+      setTimeout(() => {
+        document.getElementById(`card-${target.id}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 280);
+    }
+  }
+
+  function summarizeTournament(tournamentId) {
+    const pool = tournamentId === "all" ? MATCHES : MATCHES.filter(m => m.tournament === tournamentId);
+    if (!pool.length) return "No matches listed right now.";
+    return pool.map(m => {
+      const [p1, p2] = m.players;
+      const status = m.status === "live"
+        ? `LIVE now, score ${m.score}`
+        : `upcoming ${m.time || "soon"}`;
+      return `${m.round}: ${p1.fullName} vs ${p2.fullName} (${status}, odds ${p1.odds.toFixed(2)} / ${p2.odds.toFixed(2)})`;
+    }).join(". ");
+  }
+
+  function findTournamentBySpeech(text) {
+    const t = (text || "").toLowerCase();
+    if (/\b(all tournaments|every tournament|all matches)\b/.test(t)) return "all";
+    if (/\b(cincinnati|cincy)\b/.test(t)) return "Cincinnati";
+    if (/\b(davis cup|davis)\b/.test(t)) return "Davis Cup";
+    if (/\bwimbledon\b/.test(t)) return "Wimbledon";
+    return null;
+  }
+
+  function isTournamentNavIntent(text) {
+    const t = (text || "").toLowerCase();
+    if (!findTournamentBySpeech(t)) return false;
+    if (findPlayerByName(t) && /\b(bet|pick|choose|back)\b/.test(t)) return false;
+    if (/\b(best|recommend|top|who should)\b/.test(t) && /\b(bet|pick)\b/.test(t)) return false;
+    return /\b(check|check out|checkout|show|switch|go to|take me|see|look|what|tell|happening|going on|anything|matches|there|about|at|open|view|want to)\b/.test(t);
+  }
+
+  function handleTournamentIntent(tournamentId) {
+    removeSuggestionBanner();
+    yukiFlowState = "idle";
+    yukiPendingMatch = yukiPendingPlayer = null;
+
+    selectTournament(tournamentId);
+
+    const label = tournamentId === "all" ? "all tournaments" : tournamentId;
+    const summary = summarizeTournament(tournamentId);
+
+    window.Voice?.sendContext?.(
+      `System: The player switched to ${label}. ${summary}. Tell them what's live and worth watching — keep it brief and enthusiastic.`
+    );
+    askRouter("tournament_nav", `What's happening at ${label}?`, {
+      tournament: tournamentId,
+      match_count: (tournamentId === "all" ? MATCHES : MATCHES.filter(m => m.tournament === tournamentId)).length,
+    });
+
+    bus?.emit("sports:tournament", { tournament: tournamentId, summary });
   }
 
   function renderMatches() {
@@ -499,12 +569,29 @@
     return null;
   }
 
-  // ── Yuki voice flow ──────────────────────────────────────────────────────────
+  // ── Inworld Router (text) + Realtime voice context ───────────────────────────
+  function askRouter(intent, userContent, metadataExtra = {}) {
+    if (!window.Router?.chat) return;
+    const metadata = window.Router.buildBettingMetadata({ intent, ...metadataExtra });
+    window.Router.chat([{ role: "user", content: userContent }], {
+      metadata,
+      onDone(text) {
+        if (!text || window.Voice?.isConnected?.()) return;
+        bus?.emit("widget:reaction", {
+          reaction: { emotion: "talking", line: text.slice(0, 140) },
+          type: "IDLE",
+          payload: {},
+        });
+      },
+    }).catch((err) => console.warn("[router]", err.message));
+  }
+
   function handleBetIntent() {
     if (yukiFlowState !== "idle") return;
     window.Voice?.sendContext?.(
       "System: The player wants to place a tennis bet. Live Wimbledon, Cincinnati and Davis Cup matches are on screen. Greet them briefly and invite them to pick a match or ask for a recommendation."
     );
+    askRouter("place_bet", "The player wants to place a tennis bet. Guide them to pick a match or ask for a recommendation.");
     yukiFlowState = "idle";
   }
 
@@ -517,9 +604,16 @@
     yukiPendingPlayer = player;
     yukiFlowState = "awaiting_pick_confirm";
     showSuggestionBanner(match, player, opponent);
-    window.Voice?.sendContext?.(
-      `System: The player asked for the best tennis pick. Best bet right now: ${player.fullName} (${player.flag} Rank #${player.rank}, perf ${Math.round(player.perf)}%) vs ${opponent?.fullName || "opponent"} in ${match.tournament} ${match.round}. Odds: ${player.odds.toFixed(2)}. Recommend and ask if they want you to fill the bet slip.`
-    );
+    const ctx =
+      `Best pick: ${player.fullName} (${player.flag} Rank #${player.rank}, perf ${Math.round(player.perf)}%) vs ${opponent?.fullName || "opponent"} in ${match.tournament} ${match.round}. Odds: ${player.odds.toFixed(2)}.`;
+    window.Voice?.sendContext?.(`System: The player asked for the best tennis pick. ${ctx} Recommend and ask if they want you to fill the bet slip.`);
+    askRouter("best_pick", `Who is your best tennis pick right now? ${ctx}`, {
+      match_id: match.id,
+      player_id: player.id,
+      player_name: player.fullName,
+      odds: player.odds,
+      tournament: match.tournament,
+    });
   }
 
   function handleNamedPlayerIntent(matchId, playerId) {
@@ -534,6 +628,13 @@
     window.Voice?.sendContext?.(
       `System: Player wants to bet on ${player.fullName} in ${match.tournament} ${match.round} vs ${opponent?.fullName || "opponent"}. Odds: ${player.odds.toFixed(2)}. Confirm with enthusiasm and ask if they want the bet slip filled.`
     );
+    askRouter("named_player", `I want to bet on ${player.fullName} in ${match.tournament}.`, {
+      match_id: matchId,
+      player_id: playerId,
+      player_name: player.fullName,
+      odds: player.odds,
+      tournament: match.tournament,
+    });
   }
 
   function handleConfirmIntent() {
@@ -568,13 +669,23 @@
     removeSuggestionBanner();
     const card = document.getElementById(`card-${match.id}`);
     if (!card) return;
+
+    card.classList.add("has-yuki-suggest");
+
     const banner = document.createElement("div");
     banner.className = "yuki-suggest-banner";
     banner.id = "yuki-suggest-banner";
     banner.innerHTML = `
-      <span class="suggest-text">✦ Yuki suggests: <strong>${player.fullName}</strong> (${player.odds.toFixed(2)}×)</span>
-      <button class="suggest-confirm" id="suggest-yes-btn">Yes, fill it!</button>
-      <button class="suggest-dismiss" id="suggest-no-btn">✕</button>
+      <span class="suggest-badge" aria-hidden="true">✦</span>
+      <div class="suggest-body">
+        <span class="suggest-label">Yuki suggests</span>
+        <span class="suggest-text"><strong>${player.fullName}</strong> @ ${player.odds.toFixed(2)}×</span>
+        <span class="suggest-match">${match.tournament} · ${match.round} vs ${opponent?.name || "opponent"}</span>
+      </div>
+      <div class="suggest-actions">
+        <button class="suggest-confirm" id="suggest-yes-btn">Yes, fill it!</button>
+        <button class="suggest-dismiss" id="suggest-no-btn" aria-label="Dismiss">✕</button>
+      </div>
     `;
     card.appendChild(banner);
     card.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -588,6 +699,7 @@
 
   function removeSuggestionBanner() {
     document.getElementById("yuki-suggest-banner")?.remove();
+    document.querySelectorAll(".match-card.has-yuki-suggest").forEach(c => c.classList.remove("has-yuki-suggest"));
   }
 
   // ── Screen lifecycle ─────────────────────────────────────────────────────────
@@ -618,9 +730,15 @@
     handleBestPlayerIntent,
     handleNamedPlayerIntent,
     handleConfirmIntent,
+    handleTournamentIntent,
     autofillBet,
     getBestPlayer,
     findPlayerByName,
+    findTournamentBySpeech,
+    isTournamentNavIntent,
+    selectTournament,
+    summarizeTournament,
+    getActiveTournament: () => activeTournament,
     get flowState() { return yukiFlowState; },
   };
 })();

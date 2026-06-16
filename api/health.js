@@ -1,4 +1,5 @@
 import { resolveApiKey } from "../lib/inworld-jwt.mjs";
+import { isRouterConfigured, ROUTER_MODEL } from "../lib/inworld-router.mjs";
 
 /** @type {import('@vercel/node').VercelRequest} */
 export default function handler(req, res) {
@@ -14,10 +15,12 @@ export default function handler(req, res) {
     ok: true,
     platform: "vercel",
     inworld: hasKey,
+    router: isRouterConfigured(),
+    routerModel: ROUTER_MODEL,
     voiceConfigured: hasKey || Boolean(process.env.VOICE_BACKEND_URL || process.env.VOICE_PROXY_URL),
     mode: hasKey ? "webrtc" : "proxy",
     note: hasKey
-      ? "Voice uses WebRTC via INWORLD_API_KEY — no Railway needed"
-      : "Set INWORLD_API_KEY on Vercel for voice (Railway not required)",
+      ? "Voice uses WebRTC; Router uses /api/chat/completions"
+      : "Set INWORLD_API_KEY on Vercel",
   });
 }

@@ -64,16 +64,49 @@ npm run test:greeting   # should print SUCCESS
 
 ```
 sports.js  ──▶  EventBus  ──▶  widget.js  ──▶  character.js
-                    │
-                    └──▶  voice.js  ──▶  server/index.js  ──▶  Inworld
+     │              │
+     │              └──▶  router.js  ──▶  /api/chat/completions  ──▶  Inworld Router
+     │                        (inworld/yuki-for-betting)
+     └──▶  voice.js  ──▶  server/index.js  ──▶  Inworld Realtime
 ```
 
 | Path | Role |
 |------|------|
-| `js/sports.js` | Tennis matches, bet slip, voice intent handlers |
-| `js/voice.js` | Mic, playback, Realtime protocol, transcript intents |
-| `js/widget.js` | Yuki UI, mute/hide, voice transcript → betting actions |
-| `server/index.js` | Static host + WebSocket proxy |
+| `lib/inworld-router.mjs` | Server-side Router chat completions (Basic auth) |
+| `api/chat/completions.js` | Vercel/local proxy — streams SSE to browser |
+| `js/router.js` | Client streaming chat + betting metadata |
+| `js/sports.js` | Tennis betting + voice/router intent handlers |
+| `js/voice.js` | Realtime voice (uses same router model in session) |
+
+### Inworld Router
+
+Yuki's betting personality lives in the Inworld Router (`inworld/yuki-for-betting`). The API key is never sent to the browser.
+
+```bash
+# .env
+INWORLD_API_KEY=your_base64_key_here
+INWORLD_ROUTER_MODEL=inworld/yuki-for-betting
+```
+
+Test the router:
+
+```bash
+npm run test:router
+```
+
+Client usage:
+
+```javascript
+await Router.chat(
+  [{ role: "user", content: "Who should I bet on?" }],
+  {
+    metadata: Router.buildBettingMetadata({ intent: "best_pick" }),
+    onDelta: ({ content }) => console.log(content),
+  }
+);
+```
+
+Betting intents pass `extra_body.metadata` (balance, flow_state, player, odds, tournament) for conditional routing in your Inworld router config.
 
 ---
 
