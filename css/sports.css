@@ -448,6 +448,13 @@
 .sports-screen .yuki-slot--bar {
   flex-shrink: 0;
   z-index: 4;
+  pointer-events: auto;
+}
+
+.sports-screen .yuki-slot--bar .yuki-bar {
+  min-height: unset !important;
+  overflow: hidden;
+  padding: 0 4px;
 }
 
 /* ── bet slip ───────────────────────────────────────────────────────────────── */
@@ -461,7 +468,7 @@
   opacity: 0;
 }
 .bet-slip.open {
-  max-height: 200px;
+  max-height: 320px;
   opacity: 1;
 }
 
@@ -524,6 +531,30 @@
   font-size: 12px;
   font-weight: 700;
   color: var(--green);
+}
+
+.bet-slip-stake-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  margin-top: 4px;
+  border-radius: 8px;
+  background: var(--gold-dim);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+.bet-slip-stake-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.bet-slip-stake-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--gold-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .bet-slip-bottom {
@@ -658,6 +689,23 @@
   text-overflow: ellipsis;
 }
 
+.yuki-suggest-banner .suggest-stake {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.yuki-suggest-banner .suggest-stake strong {
+  color: var(--green);
+}
+.yuki-suggest-banner .suggest-stake.missing {
+  color: var(--gold);
+  font-weight: 600;
+}
+.yuki-suggest-banner .suggest-stake.missing em {
+  font-style: normal;
+  opacity: 0.9;
+}
+
 .yuki-suggest-banner .suggest-actions {
   flex-shrink: 0;
   display: flex;
@@ -736,6 +784,7 @@
   .player-odds-btn{ padding: 8px 4px 7px; }
 
   .bet-slip-inner { padding: 7px 10px 8px; gap: 5px; }
+  .bet-slip.open { max-height: 300px; }
   .sports-place-btn { padding: 10px; font-size: 13px; }
 
   .yuki-suggest-banner { padding: 8px 10px; gap: 8px; }

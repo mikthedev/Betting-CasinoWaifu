@@ -22,18 +22,31 @@
   }
 
   function buildBettingMetadata(overrides = {}) {
-    const best = window.Sports?.getBestPlayer?.();
+    const board = window.Sports?.getBoardState?.() ?? {};
     const roster = window.Sports?.getRosterMetadata?.() ?? {};
+    const bestInView = board.best_in_view;
     return {
       app: "betting-casinowaifu",
       balance: window.Betting?.getBalance?.() ?? 0,
+      locked_stake: window.Sports?.getLockedStake?.() ?? null,
+      valid_stakes: window.Sports?.getValidStakes?.() ?? [10, 25, 50, 100],
       flow_state: window.Sports?.flowState ?? "idle",
-      best_player: best?.player?.fullName ?? null,
-      best_odds: best?.player?.odds ?? null,
-      tournament: window.Sports?.getActiveTournament?.() ?? best?.match?.tournament ?? null,
-      available_tournaments: roster.tournaments ?? [],
+      missing_fields: window.Sports?.getMissingBetFields?.() ?? [],
+      active_tab: board.active_tab_label ?? roster.active_tab_label ?? null,
+      tournament: board.active_tab === "all" ? "all" : (board.active_tab ?? null),
+      best_player: bestInView?.name ?? null,
+      best_odds: bestInView?.odds ?? null,
+      best_player_tournament: bestInView?.tournament ?? null,
+      visible_matches: board.visible_matches ?? roster.visible_matches ?? [],
+      visible_player_names: board.visible_player_names ?? roster.visible_player_names ?? [],
+      bet_slip: board.bet_slip ?? null,
+      available_tournaments: roster.tournaments ?? board.all_tournaments ?? [],
       available_player_names: roster.player_names ?? [],
       available_matches: roster.matches ?? [],
+      screen_rules:
+        board.active_tab && board.active_tab !== "all"
+          ? `Player is viewing ${board.active_tab_label} ONLY. Recommend and discuss ONLY: ${(board.visible_player_names || []).join(", ")}.`
+          : "Player sees all tournaments on screen.",
       roster_rules: "Only suggest or fill bets for players in available_player_names. Never invent players.",
       ...overrides,
     };

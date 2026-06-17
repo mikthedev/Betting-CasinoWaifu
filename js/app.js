@@ -28,18 +28,10 @@
     return _balance;
   }
 
-  function isMobileViewport() {
-    return window.matchMedia("(max-width: 480px)").matches;
-  }
-
   function placeYuki() {
     if (!yukiWidget) return;
 
-    if (isMobileViewport()) {
-      document.body.classList.add("yuki-overlay-mode");
-      return;
-    }
-
+    // Always in-flow between matches and bet slip — overlay overlapped the slip on mobile.
     document.body.classList.remove("yuki-overlay-mode");
     if (yukiSlot && yukiSlot !== yukiWidget.parentElement) {
       yukiSlot.appendChild(yukiWidget);

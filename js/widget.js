@@ -664,11 +664,17 @@
       applyUserVibe(vibe);
     });
 
-    bus.on("voice:transcript", ({ text, role } = {}) => {
-      if (role !== "user" || !text || isCompanion) return;
+    bus.on("voice:transcript", ({ text, role, partial } = {}) => {
+      if (partial || role !== "user" || !text || isCompanion) return;
       const t = text.toLowerCase();
 
       if (window.Sports) {
+        const tournament = window.Sports.findTournamentBySpeech?.(t);
+        if (tournament && window.Sports.isTournamentNavIntent?.(t)) {
+          window.Sports.handleTournamentIntent(tournament);
+          return;
+        }
+
         if (window.Sports.isSwitchPlayerIntent?.(t)) {
           window.Sports.handleSwitchPlayerIntent();
           return;
@@ -678,14 +684,18 @@
           return;
         }
 
-        if (window.Sports.isConfirmIntent?.(t)) {
+        if (window.Sports.isStakeIntent?.(t)) {
+          window.Sports.handleStakeIntent(t);
+          return;
+        }
+
+        if (window.Sports.isFillSlipIntent?.(t) && window.Sports.canFillSlip?.(t)) {
           window.Sports.handleConfirmIntent(t);
           return;
         }
 
-        const tournament = window.Sports.findTournamentBySpeech?.(t);
-        if (tournament && window.Sports.isTournamentNavIntent?.(t)) {
-          window.Sports.handleTournamentIntent(tournament);
+        if (window.Sports.isConfirmIntent?.(t)) {
+          window.Sports.handleConfirmIntent(t);
           return;
         }
 
@@ -700,7 +710,7 @@
         const wantsRecommendation = isBestQuery
           || /\b(recommend|suggestion|who should|best pick|top pick|your pick)\b/.test(t);
         if (wantsRecommendation && !window.Sports.hasUserPlayerLock?.()) {
-          window.Sports.handleBestPlayerIntent();
+          window.Sports.handleBestPlayerIntent(t);
           return;
         }
       }

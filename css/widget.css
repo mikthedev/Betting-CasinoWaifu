@@ -376,9 +376,27 @@
     pointer-events: none;
   }
 
-  /* Hide the empty in-flow slot */
+  /* Hide the empty in-flow slot (legacy overlay mode) */
   .yuki-overlay-mode .yuki-slot--bar {
     display: none !important;
+  }
+
+  /* In-flow slot on betting screen (default) */
+  body.betting-mode .yuki-slot--bar .yuki-bar {
+    min-height: unset !important;
+    overflow: hidden;
+    padding: 0 4px;
+  }
+
+  body.betting-mode .yuki-slot--bar .yuki-side-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+
+  /* Hide empty fixed host when widget lives in the slot */
+  body.betting-mode .yuki-widget-host:empty {
+    display: none;
   }
 }
 

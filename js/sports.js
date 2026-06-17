@@ -152,6 +152,20 @@
   let fillGeneration        = 0;
   let fillTimers            = [];
 
+  const VALID_STAKES = [10, 25, 50, 100];
+  let userLockedStake     = null;
+  let capabilitiesIntroSent = false;
+
+  const STAKE_WORDS = {
+    ten: 10,
+    twenty: 20,
+    "twenty five": 25,
+    twentyfive: 25,
+    fifty: 50,
+    hundred: 100,
+    "one hundred": 100,
+  };
+
   let matchesEl = null;
   let betSlipEl = null;
   let placeBtnEl = null;
@@ -193,8 +207,18 @@
         }
       });
 
-      if (m.id === selectedMatchId) updateReturns();
     });
+    refreshBetSlipOdds();
+  }
+
+  function refreshBetSlipOdds() {
+    if (!selectedMatchId || !selectedPlayerId) return;
+    const match = MATCHES.find(m => m.id === selectedMatchId);
+    const player = match?.players.find(p => p.id === selectedPlayerId);
+    if (!player) return;
+    const oddsEl = document.querySelector(".bet-slip-odds strong");
+    if (oddsEl) oddsEl.textContent = player.odds.toFixed(2);
+    updateReturns();
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -222,6 +246,153 @@
     });
   }
 
+  function getVisibleMatches() {
+    return activeTournament === "all"
+      ? MATCHES
+      : MATCHES.filter(m => m.tournament === activeTournament);
+  }
+
+  function formatMatchLine(m) {
+    const [p1, p2] = m.players;
+    const status = m.status === "live"
+      ? `LIVE${m.score ? ` ${m.score}` : ""}`
+      : (m.time || "upcoming");
+    return `${m.tournament} ${m.round} (${status}): ${p1.fullName} @ ${p1.odds.toFixed(2)} vs ${p2.fullName} @ ${p2.odds.toFixed(2)}`;
+  }
+
+  function getBestPlayerInView() {
+    let best = null;
+    let bestScore = -1;
+    getVisibleMatches().forEach(m => {
+      m.players.forEach(p => {
+        if (p.perf > bestScore) {
+          bestScore = p.perf;
+          best = { match: m, player: p };
+        }
+      });
+    });
+    return best;
+  }
+
+  function getBoardState() {
+    const visible = getVisibleMatches();
+    const tabLabel = activeTournament === "all" ? "All Tournaments" : activeTournament;
+
+    let betSlip = null;
+    if (selectedMatchId && selectedPlayerId) {
+      const match = MATCHES.find(m => m.id === selectedMatchId);
+      const player = match?.players.find(p => p.id === selectedPlayerId);
+      if (match && player) {
+        betSlip = {
+          player: player.fullName,
+          player_id: player.id,
+          tournament: match.tournament,
+          round: match.round,
+          odds: player.odds,
+          stake: userLockedStake ?? selectedChip,
+        };
+      }
+    }
+
+    let suggestion = null;
+    if (yukiPendingMatch && yukiPendingPlayer) {
+      suggestion = {
+        player: yukiPendingPlayer.fullName,
+        player_id: yukiPendingPlayer.id,
+        tournament: yukiPendingMatch.tournament,
+        odds: yukiPendingPlayer.odds,
+        stake: userLockedStake,
+      };
+    }
+
+    const bestInView = getBestPlayerInView();
+
+    return {
+      active_tab: activeTournament,
+      active_tab_label: tabLabel,
+      visible_match_count: visible.length,
+      visible_matches: visible.map(m => ({
+        match_id: m.id,
+        tournament: m.tournament,
+        round: m.round,
+        surface: m.surface,
+        status: m.status,
+        score: m.score,
+        time: m.time,
+        line: formatMatchLine(m),
+        players: m.players.map(p => ({
+          player_id: p.id,
+          full_name: p.fullName,
+          short_name: p.name,
+          odds: p.odds,
+          perf: Math.round(p.perf),
+        })),
+      })),
+      visible_player_names: visible.flatMap(m => m.players.map(p => p.fullName)),
+      best_in_view: bestInView
+        ? {
+            name: bestInView.player.fullName,
+            player_id: bestInView.player.id,
+            tournament: bestInView.match.tournament,
+            odds: bestInView.player.odds,
+            perf: Math.round(bestInView.player.perf),
+          }
+        : null,
+      bet_slip: betSlip,
+      yuki_suggestion: suggestion,
+      flow_state: yukiFlowState,
+      all_tournaments: [...new Set(MATCHES.map(m => m.tournament))],
+    };
+  }
+
+  function buildBoardStateMessage() {
+    const state = getBoardState();
+    const visibleLines = state.visible_matches.map(m => m.line);
+    const fullRosterByTour = {};
+    MATCHES.forEach(m => {
+      if (!fullRosterByTour[m.tournament]) fullRosterByTour[m.tournament] = [];
+      fullRosterByTour[m.tournament].push(formatMatchLine(m));
+    });
+    const tourSummaries = Object.entries(fullRosterByTour)
+      .map(([t, lines]) => `${t}: ${lines.join("; ")}`)
+      .join(" | ");
+
+    let screen = "CURRENT SCREEN (authoritative — what the player sees NOW):\n";
+    screen += `Active tab: ${state.active_tab_label}.\n`;
+    if (state.active_tab === "all") {
+      screen += `All ${state.visible_match_count} matches across every tournament are visible.\n`;
+    } else {
+      screen += `ONLY ${state.active_tab_label} is on screen (${state.visible_match_count} match${state.visible_match_count === 1 ? "" : "es"}). `;
+      screen += `Do NOT recommend or discuss players from other tournaments unless the player switches tabs.\n`;
+    }
+    screen += `Visible matches: ${visibleLines.join(" | ") || "none"}.\n`;
+    screen += `Players on screen: ${state.visible_player_names.join(", ") || "none"}.\n`;
+    if (state.best_in_view) {
+      screen += `Top form on this screen: ${state.best_in_view.name} (${state.best_in_view.tournament}) @ ${state.best_in_view.odds.toFixed(2)}.\n`;
+    }
+    if (state.bet_slip) {
+      screen += `Bet slip selected: ${state.bet_slip.player} @ ${state.bet_slip.odds.toFixed(2)}, stake ${state.bet_slip.stake}, ${state.bet_slip.tournament} ${state.bet_slip.round}.\n`;
+    } else {
+      screen += "Bet slip: empty.\n";
+    }
+    if (state.yuki_suggestion) {
+      screen += `Yuki draft: ${state.yuki_suggestion.player} @ ${state.yuki_suggestion.odds.toFixed(2)} (${state.yuki_suggestion.tournament}).\n`;
+    }
+    screen += `Flow: ${state.flow_state}.\n`;
+
+    const roster =
+      "FULL DEMO ROSTER (all tabs — never invent off-list names): " +
+      `${tourSummaries}. ` +
+      "Tournaments available: Wimbledon, Cincinnati, Davis Cup. " +
+      "When the player opens a tournament tab, ONLY discuss players listed under CURRENT SCREEN.";
+
+    return `${screen}\n${roster}`;
+  }
+
+  function syncBoardToVoice() {
+    window.Voice?.sendContextSilent?.(buildBoardStateMessage());
+  }
+
   function selectTournament(tournamentId, { scroll = true } = {}) {
     activeTournament = tournamentId;
     const tabsEl = document.getElementById("sports-tournament-tabs");
@@ -229,6 +400,7 @@
       b.classList.toggle("active", b.dataset.tour === tournamentId);
     });
     renderMatches();
+    syncBoardToVoice();
 
     if (!scroll) return;
 
@@ -269,28 +441,52 @@
 
   function isTournamentNavIntent(text) {
     const t = (text || "").toLowerCase();
-    if (!findTournamentBySpeech(t)) return false;
-    if (findPlayerByName(t) && /\b(bet|pick|choose|back)\b/.test(t)) return false;
+    const tournament = findTournamentBySpeech(t);
+    if (!tournament) return false;
+
+    // Explicit bet on a named roster player — not tab navigation
+    if (findPlayerByName(t) && /\b(bet|pick|choose|back|wager|stake)\b/.test(t)) return false;
     if (/\b(best|recommend|top|who should)\b/.test(t) && /\b(bet|pick)\b/.test(t)) return false;
-    return /\b(check|check out|checkout|show|switch|go to|take me|see|look|what|tell|happening|going on|anything|matches|there|about|at|open|view|want to)\b/.test(t);
+
+    const NAV_CUES = /\b(check|check out|checkout|show|switch|go to|take me|see|look|what|tell|happening|going on|anything|matches|there|about|at|open|view|want to|want|browse|explore|navigate|filter|let me see|let's see|lets see)\b/;
+    if (NAV_CUES.test(t)) return true;
+
+    // Bare tournament mention with no roster player — e.g. "Davis Cup", "Wimbledon"
+    if (!findPlayerByName(t) && !fuzzyFindPlayer(t)) return true;
+
+    return false;
   }
 
   function handleTournamentIntent(tournamentId) {
     removeSuggestionBanner();
     yukiFlowState = "idle";
     yukiPendingMatch = yukiPendingPlayer = null;
+    lockedFillTarget = null;
+    clearUserChosenPlayer();
+
+    selectedMatchId = selectedPlayerId = null;
+    betSlipEl = betSlipEl || document.getElementById("bet-slip");
+    betSlipEl?.classList.remove("open");
+    if (placeBtnEl) placeBtnEl.disabled = true;
+    document.querySelectorAll(".player-odds-btn").forEach(btn => {
+      btn.classList.remove("selected", "yuki-suggested", "yuki-fill");
+    });
+    document.querySelectorAll(".match-card").forEach(c => c.classList.remove("has-selection"));
 
     selectTournament(tournamentId);
 
     const label = tournamentId === "all" ? "all tournaments" : tournamentId;
     const summary = summarizeTournament(tournamentId);
+    syncBoardToVoice();
 
     window.Voice?.sendContext?.(
-      `System: The player switched to ${label}. ${summary}. Tell them what's live and worth watching — keep it brief and enthusiastic.`
+      `System: The player opened ${label} ONLY — stay on this tournament tab. ${summary}. ` +
+      `Describe ONLY the matches now visible at ${label}. Do NOT recommend players from other tournaments. Do NOT auto-fill a bet slip.`
     );
     askRouter("tournament_nav", `What's happening at ${label}?`, {
       tournament: tournamentId,
       match_count: (tournamentId === "all" ? MATCHES : MATCHES.filter(m => m.tournament === tournamentId)).length,
+      visible_player_names: getBoardState().visible_player_names,
     });
 
     bus?.emit("sports:tournament", { tournament: tournamentId, summary });
@@ -465,6 +661,7 @@
     });
     updateBetSlip(matchId, playerId);
     updateBestBadgesVisibility();
+    syncBoardToVoice();
   }
 
   /** Hide perf "Best" badges when a match has an active pick or Yuki suggestion. */
@@ -508,7 +705,144 @@
     const player = match?.players.find(p => p.id === selectedPlayerId);
     const retEl  = document.getElementById("bet-returns");
     if (!retEl || !player) return;
-    retEl.textContent = (selectedChip * player.odds).toFixed(2);
+    retEl.textContent = (resolveActiveStake() * player.odds).toFixed(2);
+  }
+
+  function resolveActiveStake() {
+    return userLockedStake ?? selectedChip;
+  }
+
+  function normalizeStake(amount) {
+    const n = Math.round(Number(amount));
+    if (!n || n < 1) return null;
+    if (VALID_STAKES.includes(n)) return n;
+    return n;
+  }
+
+  function parseStakeFromSpeech(text) {
+    const t = (text || "").toLowerCase();
+    const numMatch = t.match(/(?:\$|stake|wager|bet|put|risk)\s*(\d{1,4})\b|\b(\d{1,4})\s*(?:dollars?|bucks?|chips?|credits?)\b/);
+    const raw = numMatch ? (numMatch[1] || numMatch[2]) : null;
+    if (raw) return normalizeStake(Number(raw));
+
+    const bare = t.match(/\b(\d{1,4})\b/);
+    if (bare && /\b(stake|amount|wager|bet|put|for|make it|change|chips?)\b/.test(t)) {
+      return normalizeStake(Number(bare[1]));
+    }
+
+    for (const [word, val] of Object.entries(STAKE_WORDS)) {
+      if (new RegExp(`\\b${word.replace(/\s+/g, "\\s+")}\\b`).test(t)) {
+        return normalizeStake(val);
+      }
+    }
+    return null;
+  }
+
+  function setUserLockedStake(amount) {
+    const stake = normalizeStake(amount);
+    if (!stake) return null;
+    userLockedStake = stake;
+    if (VALID_STAKES.includes(stake)) selectedChip = stake;
+    syncStakeUI();
+    return stake;
+  }
+
+  function clearUserLockedStake() {
+    userLockedStake = null;
+    syncStakeUI();
+  }
+
+  function resolveStakeForFill(text) {
+    const parsed = text ? parseStakeFromSpeech(text) : null;
+    if (parsed && VALID_STAKES.includes(parsed)) return parsed;
+    if (userLockedStake && VALID_STAKES.includes(userLockedStake)) return userLockedStake;
+
+    if (!resolveFillTarget(text)) return null;
+
+    const t = (text || "").toLowerCase();
+    const allowDefault =
+      text == null ||
+      text === undefined ||
+      isExplicitFillOrConfirm(t) ||
+      yukiFlowState === "awaiting_confirm" ||
+      isFillSlipIntent(t);
+
+    if (allowDefault) {
+      return VALID_STAKES.includes(selectedChip) ? selectedChip : VALID_STAKES[1];
+    }
+    return null;
+  }
+
+  function isExplicitFillOrConfirm(text) {
+    const t = (text || "").toLowerCase();
+    return isFillSlipIntent(t)
+      || /\b(yes|sure|ok|okay|yep|yeah|go ahead|do it|confirm|sounds good|perfect|great)\b/.test(t)
+      || /\blet'?s (do it|go|fill|place)\b/.test(t)
+      || /\b(yes,? )?(fill|place) (it|the slip|bet|form)\b/.test(t);
+  }
+
+  function canFillSlip(text) {
+    return !!(resolveFillTarget(text) && resolveStakeForFill(text));
+  }
+
+  function syncStakeUI() {
+    const stake = userLockedStake ?? selectedChip;
+    const row = document.getElementById("bet-slip-stake-row");
+    const valEl = document.getElementById("bet-slip-stake");
+    const slipOpen = betSlipEl?.classList.contains("open") || document.getElementById("bet-slip")?.classList.contains("open");
+    if (row) row.hidden = !(userLockedStake || (slipOpen && selectedMatchId));
+    if (valEl) valEl.textContent = String(stake);
+
+    document.querySelectorAll("#sports-chips .chip-pill").forEach(b => {
+      const chip = Number(b.dataset.chip);
+      b.classList.toggle("active", userLockedStake ? chip === userLockedStake : chip === selectedChip);
+    });
+    updateReturns();
+  }
+
+  function buildBetSummary(match, player, stake) {
+    const opponent = match.players.find(p => p.id !== player.id);
+    const stakeVal = stake ?? userLockedStake;
+    const stakePart = stakeVal
+      ? `${stakeVal} chips (return ~${(stakeVal * player.odds).toFixed(2)})`
+      : "stake NOT SET — ask how much to wager (10, 25, 50, or 100)";
+    return `${player.fullName} · ${match.tournament} ${match.round} vs ${opponent?.fullName || "opponent"} @ ${player.odds.toFixed(2)} · ${stakePart}`;
+  }
+
+  function getMissingBetFields() {
+    const missing = [];
+    const hasPlayer = !!(userChosenPlayerId || yukiPendingPlayer);
+    if (!hasPlayer) missing.push("player");
+    if (!userLockedStake) missing.push("stake");
+    return missing;
+  }
+
+  function sendBetFlowContext(message) {
+    const missing = getMissingBetFields();
+    const pending = yukiPendingMatch && yukiPendingPlayer
+      ? buildBetSummary(yukiPendingMatch, yukiPendingPlayer, userLockedStake)
+      : null;
+    const extra = [
+      pending ? `Current bet draft: ${pending}.` : "",
+      missing.length ? `Still needed: ${missing.join(", ")}.` : "All required fields collected.",
+      userLockedStake ? `Locked stake: ${userLockedStake} — do not change unless user asks.` : "No stake set yet — ask before filling.",
+      `Valid stakes: ${VALID_STAKES.join(", ")}.`,
+      `Screen tab: ${getBoardState().active_tab_label}.`,
+    ].filter(Boolean).join(" ");
+    window.Voice?.sendContext?.(`System: ${message} ${extra}`);
+  }
+
+  function syncCapabilitiesIntro() {
+    if (capabilitiesIntroSent) return;
+    capabilitiesIntroSent = true;
+    window.Voice?.sendContextSilent?.(
+      "BETTING ASSISTANT CAPABILITIES: You help with tennis sports betting on screen — discuss matches, analyze live/upcoming events, recommend roster players, prepare bet slips, set stake amounts by voice, and guide the user to tap PLACE BET. " +
+      "The app has tournament tabs: All Tournaments, Wimbledon, Cincinnati, Davis Cup. Trust CURRENT SCREEN system messages for what is visible NOW — when a tab is filtered, ONLY discuss players on that tab. " +
+      "Never assume player, stake, tournament, or outcome. Ask short follow-up questions for anything missing. " +
+      "Before filling a slip, summarize player + stake + odds and ask for confirmation. When the user confirms or says fill, the APP fills the bet slip automatically — tell them once it's filled and to tap PLACE BET. " +
+      "If the user states a stake, preserve that exact amount. Available stakes: 10, 25, 50, 100. " +
+      "Keep replies short and voice-friendly. Adapt immediately if the user interrupts or changes topic."
+    );
   }
 
   function clearSelection({ resetSuggestions = false } = {}) {
@@ -516,6 +850,7 @@
     yukiFlowState = "idle";
     yukiPendingMatch = yukiPendingPlayer = null;
     clearUserChosenPlayer();
+    clearUserLockedStake();
     removeSuggestionBanner();
     document.querySelectorAll(".player-odds-btn").forEach(b => b.classList.remove("selected", "yuki-suggested", "yuki-fill"));
     document.querySelectorAll(".match-card").forEach(c => c.classList.remove("has-selection"));
@@ -523,6 +858,7 @@
     if (betSlipEl) betSlipEl.classList.remove("open");
     if (placeBtnEl) placeBtnEl.disabled = true;
     updateBestBadgesVisibility();
+    syncBoardToVoice();
     if (resetSuggestions) resetSuggestionHistory();
   }
 
@@ -536,35 +872,53 @@
         document.querySelectorAll("#sports-chips .chip-pill").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         selectedChip = Number(btn.dataset.chip);
+        if (yukiFlowState !== "idle") setUserLockedStake(selectedChip);
+        else { clearUserLockedStake(); selectedChip = Number(btn.dataset.chip); }
         updateReturns();
       });
     });
   }
 
   function placeBet() {
-    if (!selectedMatchId || !selectedPlayerId) return;
-    const balance = window.Betting?.getBalance?.() ?? 0;
-    if (balance < selectedChip) { showFlashMsg("Not enough balance!", "lose"); return; }
+    const matchId = selectedMatchId;
+    const playerId = selectedPlayerId;
+    if (!matchId || !playerId) return;
 
-    const match  = MATCHES.find(m => m.id === selectedMatchId);
-    const player = match?.players.find(p => p.id === selectedPlayerId);
+    const match = MATCHES.find(m => m.id === matchId);
+    const player = match?.players.find(p => p.id === playerId);
     if (!match || !player) return;
 
-    window.Betting?.adjustBalance(-selectedChip);
+    const stake = resolveActiveStake();
+    const balance = window.Betting?.getBalance?.() ?? 0;
+    if (balance < stake) { showFlashMsg("Not enough balance!", "lose"); return; }
+
+    if (placeBtnEl) placeBtnEl.disabled = true;
+
+    window.Betting?.adjustBalance(-stake);
 
     const winChance = 1 / player.odds;
     const won = Math.random() < winChance;
     const net = won
-      ? Math.round(selectedChip * player.odds * 100) / 100 - selectedChip
-      : -selectedChip;
+      ? Math.round(stake * player.odds * 100) / 100 - stake
+      : -stake;
+
+    const outcome = {
+      player: player.fullName,
+      player_id: player.id,
+      match_id: match.id,
+      tournament: match.tournament,
+      round: match.round,
+      odds: player.odds,
+      stake,
+    };
 
     if (won) {
-      window.Betting?.adjustBalance(Math.round(selectedChip * player.odds * 100) / 100);
+      window.Betting?.adjustBalance(Math.round(stake * player.odds * 100) / 100);
       showFlashMsg(`+${net.toFixed(0)} 🎾 ${player.fullName} wins!`, "win");
-      bus?.emit("sports:event", { type: "WIN", payload: { net, player: player.fullName, odds: player.odds } });
+      bus?.emit("sports:event", { type: "WIN", payload: { ...outcome, net } });
     } else {
-      showFlashMsg(`−${selectedChip} ${player.fullName} lost 😔`, "lose");
-      bus?.emit("sports:event", { type: "LOSE", payload: { chip: selectedChip, player: player.fullName } });
+      showFlashMsg(`−${stake} ${player.fullName} lost 😔`, "lose");
+      bus?.emit("sports:event", { type: "LOSE", payload: { ...outcome, chip: stake } });
     }
 
     clearSelection({ resetSuggestions: true });
@@ -595,6 +949,7 @@
     userChosenMatchId = null;
     userChosenPlayerId = null;
     lockedFillTarget = null;
+    userLockedStake = null;
   }
 
   function setUserChosenPlayer(matchId, playerId) {
@@ -649,21 +1004,14 @@
   }
 
   function getBestPlayer() {
-    let best = null, bestScore = -1;
-    MATCHES.forEach(m => {
-      m.players.forEach(p => {
-        if (p.perf > bestScore) { bestScore = p.perf; best = { match: m, player: p }; }
-      });
-    });
-    return best;
+    return getBestPlayerInView();
   }
 
   function getNextSuggestedPlayer({ preferDifferentMatch = false } = {}) {
     const exclude = new Set(suggestedPlayerIds);
-    const lastMatch = lastSuggestedMatchId ? MATCHES.find(m => m.id === lastSuggestedMatchId) : null;
     const candidates = [];
 
-    MATCHES.forEach(m => {
+    getVisibleMatches().forEach(m => {
       m.players.forEach(p => {
         if (exclude.has(p.id)) return;
         candidates.push({
@@ -720,8 +1068,9 @@
   function isFillSlipIntent(text) {
     const t = (text || "").toLowerCase();
     if (fuzzyFindPlayer(t) && /\b(fill|place|put)\b/.test(t)) return true;
-    return /\b(fill out|fill in|fill the|fill my|fill it|fill form|fill slip|place the bet|place bet)\b/.test(t)
+    return /\b(fill out|fill in|fill the|fill my|fill it|fill form|fill slip|place the bet|place bet|fill for me)\b/.test(t)
       || /\b(fill|place|submit|complete) (the )?(form|slip|bet)\b/.test(t)
+      || /\b(you |please )?(fill|place) (it|the slip|the form|my bet)\b/.test(t)
       || /\bput .+ on (the|my) (slip|form|bet)\b/.test(t);
   }
 
@@ -772,7 +1121,10 @@
       return { matchId: recentYuki.matchId, playerId: recentYuki.playerId };
     }
 
-    if (yukiFlowState === "awaiting_pick_confirm" && yukiPendingMatch && yukiPendingPlayer) {
+    if (yukiFlowState === "awaiting_confirm" && yukiPendingMatch && yukiPendingPlayer) {
+      return { matchId: yukiPendingMatch.id, playerId: yukiPendingPlayer.id };
+    }
+    if (yukiPendingMatch && yukiPendingPlayer) {
       return { matchId: yukiPendingMatch.id, playerId: yukiPendingPlayer.id };
     }
     return null;
@@ -792,30 +1144,17 @@
       || /\b(yes,? )?(fill|place) (it|the slip|bet)\b/.test(t);
   }
 
-  function beginPlayerSuggestion(match, player) {
+  function beginPlayerSuggestion(match, player, { suggested = false } = {}) {
     trackSuggestedPlayer(player.id, match.id);
     yukiPendingMatch  = match;
     yukiPendingPlayer = player;
-    yukiFlowState = "awaiting_pick_confirm";
     const opponent = match.players.find(p => p.id !== player.id);
 
-    if (selectedMatchId === match.id && selectedPlayerId && selectedPlayerId !== player.id) {
-      selectedMatchId = selectedPlayerId = null;
-      betSlipEl = betSlipEl || document.getElementById("bet-slip");
-      betSlipEl?.classList.remove("open");
-      if (placeBtnEl) placeBtnEl.disabled = true;
-      document.querySelectorAll(".player-odds-btn").forEach(btn => btn.classList.remove("selected"));
-      document.querySelectorAll(".match-card").forEach(c => c.classList.remove("has-selection"));
-    }
-
     ensureMatchVisible(match);
-    showSuggestionBanner(match, player, opponent);
-    document.querySelectorAll(".player-odds-btn").forEach(btn => {
-      const isYuki = btn.dataset.match === match.id && btn.dataset.player === player.id;
-      btn.classList.toggle("yuki-suggested", isYuki);
-      if (!isYuki) btn.classList.remove("yuki-suggested");
-    });
-    updateBestBadgesVisibility();
+    // Always sync slip + selection to the active pick (fixes cross-match stale slip bug)
+    selectOdds(match.id, player.id, { fromYuki: suggested });
+    showBetBanner(match, player, opponent, { suggested });
+    syncBoardToVoice();
   }
 
   // ── Player name map ──────────────────────────────────────────────────────────
@@ -867,13 +1206,20 @@
     const map = {};
     const overrides = {
       tsitsipas: ["city pass", "cici pass", "tsiti pas", "sitsipas", "tsitsipa", "stefanos"],
-      deminaur: ["deminer", "de miner", "mina ur", "deminor"],
+      deminaur: ["deminer", "de miner", "mina ur", "deminor", "minaur"],
       djokovic: ["jokovic", "jo covich"],
       alcaraz: ["alcaras", "alcarez"],
       medvedev: ["medved", "medvedeff"],
       shelton: ["sheltan", "shelten"],
       musetti: ["museti", "mussetti"],
       hurkacz: ["hur kacz", "hurkas"],
+      norrie: ["norry", "cam norrie"],
+      rublev: ["roob lev", "rublev"],
+      draper: ["drap er", "jack draper"],
+      tiafoe: ["tee af o", "tia foe", "frances"],
+      rune: ["holger"],
+      fritz: ["taylor"],
+      zverev: ["sascha", "alexander z"],
     };
     MATCHES.forEach(m => {
       m.players.forEach(p => {
@@ -937,8 +1283,15 @@
   }
 
   function getRosterMetadata() {
+    const board = getBoardState();
     return {
-      tournaments: [...new Set(MATCHES.map(m => m.tournament))],
+      tournaments: board.all_tournaments,
+      active_tab: board.active_tab,
+      active_tab_label: board.active_tab_label,
+      visible_matches: board.visible_matches,
+      visible_player_names: board.visible_player_names,
+      best_in_view: board.best_in_view,
+      bet_slip: board.bet_slip,
       matches: MATCHES.map(m => ({
         match_id: m.id,
         tournament: m.tournament,
@@ -961,31 +1314,17 @@
   }
 
   function buildRosterSystemMessage() {
-    const meta = getRosterMetadata();
-    const lines = meta.matches.map(m => {
-      const [p1, p2] = m.players;
-      const status = m.status === "live"
-        ? `LIVE${m.score ? ` ${m.score}` : ""}`
-        : (m.time || "upcoming");
-      return `${m.tournament} ${m.round} (${status}): ${p1.fullName} @ ${p1.odds.toFixed(2)} vs ${p2.fullName} @ ${p2.odds.toFixed(2)}`;
-    });
-    return (
-      "DEMO ROSTER — ONLY these players and tournaments exist on screen. " +
-      "Never suggest, mention, or fill a bet slip for anyone not listed (no Nadal, Federer, etc.). " +
-      `Tournaments: ${meta.tournaments.join(", ")}. ` +
-      `Available players: ${meta.player_names.join(", ")}. ` +
-      `Matches: ${lines.join(" | ")}. ` +
-      "If asked for someone not listed, say they are not on today's demo board and offer someone from this roster."
-    );
+    return buildBoardStateMessage();
   }
 
   function syncRosterToVoice() {
-    window.Voice?.sendContextSilent?.(buildRosterSystemMessage());
+    syncBoardToVoice();
   }
 
   function findUnknownPlayerMention(text) {
     const t = (text || "").toLowerCase();
-    if (!/\b(bet|betting|pick|choose|back|want|wager|on)\b/.test(t)) return null;
+    if (findTournamentBySpeech(t) && isTournamentNavIntent(t)) return null;
+    if (!/\b(bet|betting|pick|choose|back|wager)\b/.test(t) && !/\bwant to bet\b/.test(t)) return null;
     if (findPlayerByName(t)) return null;
 
     const offRoster = [
@@ -1041,13 +1380,14 @@
   }
 
   function handleBetIntent() {
+    syncCapabilitiesIntro();
     if (yukiFlowState !== "idle") return;
     resetSuggestionHistory();
     syncRosterToVoice();
-    window.Voice?.sendContext?.(
-      "System: The player wants to place a tennis bet. Only suggest players from the DEMO ROSTER already in context. Greet them briefly and invite them to pick a match or ask for a recommendation."
+    sendBetFlowContext(
+      "The player opened betting. Briefly explain you help with match talk, picks, stake amounts, bet slip prep, and placing bets. Ask what they want to bet on."
     );
-    askRouter("place_bet", "The player wants to place a tennis bet. Guide them to pick a match or ask for a recommendation.");
+    askRouter("place_bet", "The player wants to place a tennis bet. Explain capabilities and ask what player and stake they want.");
     yukiFlowState = "idle";
   }
 
@@ -1055,7 +1395,8 @@
     return `${player.fullName} (${player.flag} Rank #${player.rank}, perf ${Math.round(player.perf)}%) vs ${opponent?.fullName || "opponent"} in ${match.tournament} ${match.round}. Odds: ${player.odds.toFixed(2)}.`;
   }
 
-  function handleBestPlayerIntent() {
+  function handleBestPlayerIntent(text) {
+    if (text && isTournamentNavIntent(text)) return;
     if (hasUserPlayerLock()) return;
     clearUserChosenPlayer();
     const pick = suggestedPlayerIds.length
@@ -1065,11 +1406,11 @@
     const { match, player } = pick;
     const opponent = match.players.find(p => p.id !== player.id);
     const rejected = getExcludedPlayerNames();
-    beginPlayerSuggestion(match, player);
+    beginPlayerSuggestion(match, player, { suggested: true });
     const ctx = buildPickContext(player, match, opponent);
     const rejectLine = rejected.length ? `Do NOT suggest ${rejected.join(", ")} again. ` : "";
-    window.Voice?.sendContext?.(
-      `System: The player asked for a tennis pick. ${rejectLine}Recommend ONLY ${ctx} Ask if they want you to fill the bet slip.`
+    sendBetFlowContext(
+      `Player asked for a pick. ${rejectLine}Recommend ONLY ${ctx} Ask how much to wager (10, 25, 50, 100), then summarize and confirm before filling.`
     );
     askRouter("best_pick", `Who is your best tennis pick right now? ${ctx}`, {
       match_id: match.id,
@@ -1096,14 +1437,12 @@
     const opponent = match.players.find(p => p.id !== player.id);
     const rejected = getExcludedPlayerNames();
 
-    beginPlayerSuggestion(match, player);
+    beginPlayerSuggestion(match, player, { suggested: true });
 
-    window.Voice?.sendContext?.(
-      `System: The player wants someone else — preferably from another match, not the same opponent. ` +
-      `${rejected.length ? `Do NOT suggest ${rejected.join(", ")} again. ` : ""}` +
-      `You MUST recommend ONLY ${player.fullName} vs ${opponent?.fullName || "opponent"} ` +
-      `in ${match.tournament} ${match.round} at ${player.odds.toFixed(2)}. ` +
-      `Ask if they want the bet slip filled.`
+    sendBetFlowContext(
+      `Player wants someone else. ${rejected.length ? `Do NOT suggest ${rejected.join(", ")} again. ` : ""}` +
+      `Recommend ONLY ${player.fullName} vs ${opponent?.fullName || "opponent"} in ${match.tournament} ${match.round} @ ${player.odds.toFixed(2)}. ` +
+      `Ask stake amount if missing, summarize, then confirm before filling.`
     );
     askRouter("switch_player", `Let's try betting on someone else — how about ${player.fullName}?`, {
       match_id: match.id,
@@ -1115,7 +1454,7 @@
     });
   }
 
-  function handleSelectAndFillPlayer(matchId, playerId) {
+  function handleSelectAndFillPlayer(matchId, playerId, stake) {
     const match = MATCHES.find(m => m.id === matchId);
     const player = match?.players.find(p => p.id === playerId);
     if (!match || !player) return;
@@ -1123,49 +1462,99 @@
     setUserChosenPlayer(matchId, playerId);
     yukiPendingMatch = match;
     yukiPendingPlayer = player;
+
+    const fillStake = stake ?? userLockedStake;
+    if (!fillStake) {
+      ensureMatchVisible(match);
+      beginPlayerSuggestion(match, player);
+      sendBetFlowContext(`User chose ${player.fullName}. Ask stake amount (10, 25, 50, 100) before filling the slip.`);
+      return;
+    }
+
     removeSuggestionBanner();
     ensureMatchVisible(match);
     yukiFlowState = "idle";
-
-    autofillBet(matchId, playerId, selectedChip);
-
+    autofillBet(matchId, playerId, fillStake);
     yukiPendingMatch = yukiPendingPlayer = null;
+  }
+
+  function handleStakeIntent(text) {
+    const stake = setUserLockedStake(parseStakeFromSpeech(text));
+    if (!stake) return false;
+
+    const target = resolveFillTarget(text);
+    const matchId = target?.matchId ?? userChosenMatchId ?? yukiPendingMatch?.id;
+    const playerId = target?.playerId ?? userChosenPlayerId ?? yukiPendingPlayer?.id;
+
+    if (!matchId || !playerId) {
+      yukiFlowState = "awaiting_player";
+      sendBetFlowContext(`User set stake to ${stake}. Ask which roster player they want.`);
+      return true;
+    }
+
+    const match = MATCHES.find(m => m.id === matchId);
+    const player = match?.players.find(p => p.id === playerId);
+    if (!match || !player) return false;
+
+    yukiPendingMatch = match;
+    yukiPendingPlayer = player;
+    setUserChosenPlayer(matchId, playerId);
+    ensureMatchVisible(match);
+    showBetBanner(match, player, match.players.find(p => p.id !== playerId));
+    sendBetFlowContext(
+      `User wants ${stake} chips on ${player.fullName}. Summarize: ${buildBetSummary(match, player, stake)}. Ask to confirm before filling.`
+    );
+    return true;
+  }
+
+  function isStakeIntent(text) {
+    if (!parseStakeFromSpeech(text)) return false;
+    if (fuzzyFindPlayer(text)) return false;
+    return true;
   }
 
   /** Voice utterance names a roster player — pick or fill the slip for THAT player. */
   function handleVoicePlayerIntent(text) {
     const t = (text || "").toLowerCase();
+    if (isTournamentNavIntent(t)) return false;
+
+    const stake = parseStakeFromSpeech(t);
+    if (stake) setUserLockedStake(stake);
+
     const named = fuzzyFindPlayer(t);
     if (!named) return false;
 
     setUserChosenPlayer(named.matchId, named.playerId);
-    yukiPendingMatch = MATCHES.find(m => m.id === named.matchId);
-    yukiPendingPlayer = yukiPendingMatch?.players.find(p => p.id === named.playerId) || null;
+    const match = MATCHES.find(m => m.id === named.matchId);
+    const player = match?.players.find(p => p.id === named.playerId);
+    if (!match || !player) return false;
+    yukiPendingMatch = match;
+    yukiPendingPlayer = player;
 
     if (isFillSlipIntent(t)) {
-      handleSelectAndFillPlayer(named.matchId, named.playerId);
+      handleConfirmIntent(t);
       return true;
     }
 
-    if (isPlayerPickIntent(t) || isLikelyBarePlayerUtterance(t, named) || yukiFlowState !== "idle") {
-      handleNamedPlayerIntent(named.matchId, named.playerId);
-      return true;
+    beginPlayerSuggestion(match, player);
+    if (userLockedStake) {
+      sendBetFlowContext(
+        `User picked ${player.fullName} for ${userLockedStake} chips. Summarize and ask to confirm before filling.`
+      );
+    } else {
+      sendBetFlowContext(`User picked ${player.fullName}. Ask how much to wager (10, 25, 50, 100).`);
     }
-
-    return false;
+    return true;
   }
 
   function handleNamedPlayerIntent(matchId, playerId) {
     const match  = MATCHES.find(m => m.id === matchId);
     const player = match?.players.find(p => p.id === playerId);
     if (!match || !player) return;
-    const opponent = match.players.find(p => p.id !== playerId);
     setUserChosenPlayer(matchId, playerId);
     beginPlayerSuggestion(match, player);
-    window.Voice?.sendContext?.(
-      `System: Player explicitly chose ${player.fullName} — NOT anyone else. ` +
-      `${match.tournament} ${match.round} vs ${opponent?.fullName || "opponent"}. Odds: ${player.odds.toFixed(2)}. ` +
-      `If they confirm, fill the bet slip for ${player.fullName} only.`
+    sendBetFlowContext(
+      `Player chose ${player.fullName}. ${userLockedStake ? `Stake ${userLockedStake}. Summarize and confirm.` : "Ask stake amount (10, 25, 50, 100), then summarize and confirm before filling."}`
     );
     askRouter("named_player", `I want to bet on ${player.fullName} in ${match.tournament}.`, {
       match_id: matchId,
@@ -1173,6 +1562,7 @@
       player_name: player.fullName,
       odds: player.odds,
       tournament: match.tournament,
+      stake: userLockedStake,
     });
   }
 
@@ -1184,9 +1574,22 @@
     const player = match?.players.find(p => p.id === target.playerId);
     if (!match || !player) return;
 
+    const stake = resolveStakeForFill(text);
+    if (!stake || !VALID_STAKES.includes(stake)) {
+      yukiFlowState = "awaiting_stake";
+      yukiPendingMatch = match;
+      yukiPendingPlayer = player;
+      setUserChosenPlayer(target.matchId, target.playerId);
+      ensureMatchVisible(match);
+      showBetBanner(match, player, match.players.find(p => p.id !== player.id));
+      sendBetFlowContext(`Player confirmed ${player.fullName} but stake is missing. Ask: 10, 25, 50, or 100?`);
+      return;
+    }
+
+    setUserLockedStake(stake);
     removeSuggestionBanner();
     ensureMatchVisible(match);
-    autofillBet(target.matchId, target.playerId, selectedChip);
+    autofillBet(target.matchId, target.playerId, stake);
     yukiFlowState = "idle";
     yukiPendingMatch = yukiPendingPlayer = null;
     clearUserChosenPlayer();
@@ -1200,38 +1603,51 @@
     const player = match?.players.find(p => p.id === playerId);
     if (!match || !player) return;
 
-    const card = document.getElementById(`card-${matchId}`);
-    card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    ensureMatchVisible(match);
+
+    // Update slip immediately so PLACE BET can't fire on a stale player during the animation delay
+    selectOdds(matchId, playerId, { fromYuki: true });
+    setUserLockedStake(amount);
+    selectedChip = amount;
+    syncStakeUI();
+    clearUserChosenPlayer();
+
+    window.Voice?.sendContextSilent?.(
+      `System: Bet slip filled — ${player.fullName}, ${amount} chips, ${match.tournament}, return ~${(amount * player.odds).toFixed(2)}. User must tap PLACE BET.`
+    );
 
     scheduleFill(() => {
       if (gen !== fillGeneration) return;
 
+      const card = document.getElementById(`card-${matchId}`);
+      card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       card?.classList.add("yuki-highlight");
       scheduleFill(() => card?.classList.remove("yuki-highlight"), 1200);
 
-      selectOdds(matchId, playerId, { animate: true, fromYuki: true });
-
-      document.querySelectorAll("#sports-chips .chip-pill").forEach(b => {
-        const isMatch = Number(b.dataset.chip) === amount;
-        b.classList.toggle("active", isMatch);
-        if (isMatch) selectedChip = amount;
+      document.querySelectorAll(".player-odds-btn").forEach(btn => {
+        const isThis = btn.dataset.match === matchId && btn.dataset.player === playerId;
+        if (isThis) {
+          btn.classList.remove("yuki-fill");
+          void btn.offsetWidth;
+          btn.classList.add("yuki-fill");
+        }
       });
-      updateReturns();
-
-      clearUserChosenPlayer();
-
-      window.Voice?.sendContextSilent?.(
-        `System: Bet slip is now filled for ${player.fullName} in ${match.tournament} — ${amount} chips @ ${player.odds.toFixed(2)}. ` +
-        `Tell the player to tap PLACE BET. Do not mention any other player.`
-      );
-    }, 120);
+    }, 200);
   }
 
-  // ── Suggestion banner ────────────────────────────────────────────────────────
-  function showSuggestionBanner(match, player, opponent) {
+  // ── Bet confirmation banner ─────────────────────────────────────────────────
+  function showBetBanner(match, player, opponent, { suggested = false } = {}) {
     removeSuggestionBanner();
     const card = document.getElementById(`card-${match.id}`);
     if (!card) return;
+
+    const stake = userLockedStake ?? selectedChip;
+    const stakeHtml = userLockedStake
+      ? `<span class="suggest-stake">Stake <strong>${userLockedStake}</strong> → return <strong>${(userLockedStake * player.odds).toFixed(2)}</strong></span>`
+      : `<span class="suggest-stake">Stake <strong>${selectedChip}</strong> (default) → return <strong>${(selectedChip * player.odds).toFixed(2)}</strong></span>`;
+    const label = suggested ? "Yuki suggests" : "Confirm your bet";
+
+    yukiFlowState = "awaiting_confirm";
 
     card.classList.add("has-yuki-suggest");
 
@@ -1241,12 +1657,13 @@
     banner.innerHTML = `
       <span class="suggest-badge" aria-hidden="true">✦</span>
       <div class="suggest-body">
-        <span class="suggest-label">Yuki suggests</span>
+        <span class="suggest-label">${label}</span>
         <span class="suggest-text"><strong>${player.fullName}</strong> @ ${player.odds.toFixed(2)}×</span>
         <span class="suggest-match">${match.tournament} · ${match.round} vs ${opponent?.name || "opponent"}</span>
+        ${stakeHtml}
       </div>
       <div class="suggest-actions">
-        <button class="suggest-confirm" id="suggest-yes-btn">Yes, fill it!</button>
+        <button class="suggest-confirm" id="suggest-yes-btn">Yes, fill slip!</button>
         <button class="suggest-dismiss" id="suggest-no-btn" aria-label="Dismiss">✕</button>
       </div>
     `;
@@ -1257,6 +1674,7 @@
       removeSuggestionBanner();
       yukiFlowState = "idle";
       yukiPendingMatch = yukiPendingPlayer = null;
+      clearUserLockedStake();
       updateBestBadgesVisibility();
     });
   }
@@ -1283,17 +1701,30 @@
     const r = { WIN: { emotion: "excited", line: `${payload.player} won! 🎾` }, LOSE: { emotion: "worried", line: "Unlucky…" } }[type];
     if (!r) return;
     window.Character?.reactToOutcome?.(type === "WIN" ? "WIN" : "LOSE", payload);
-    window.Voice?.notifyGameEvent?.(type === "WIN" ? "WIN" : "LOSE", { amount: payload.net || payload.chip, color: "tennis", number: payload.player });
+    window.Voice?.notifyGameEvent?.(type === "WIN" ? "WIN" : "LOSE", {
+      amount: payload.net ?? payload.chip,
+      chip: payload.chip,
+      net: payload.net,
+      player: payload.player,
+      tournament: payload.tournament,
+      odds: payload.odds,
+      stake: payload.stake,
+    });
   });
 
   bus?.on("betting:ready", startOddsTicker);
 
-  bus?.on("voice:ready", syncRosterToVoice);
+  bus?.on("voice:ready", () => {
+    syncCapabilitiesIntro();
+    syncBoardToVoice();
+  });
 
   bus?.on("voice:transcript", ({ text, role, partial }) => {
     if (partial || role !== "user" || !text) return;
     const found = fuzzyFindPlayer(text);
     if (found) setUserChosenPlayer(found.matchId, found.playerId);
+    const stake = parseStakeFromSpeech(text);
+    if (stake) setUserLockedStake(stake);
   });
 
   if (window.Betting) startOddsTicker();
@@ -1304,6 +1735,9 @@
     handleSwitchPlayerIntent,
     handleNamedPlayerIntent,
     handleVoicePlayerIntent,
+    handleStakeIntent,
+    isStakeIntent,
+    parseStakeFromSpeech,
     handleSelectAndFillPlayer,
     handleUnknownPlayerIntent,
     handleConfirmIntent,
@@ -1312,6 +1746,10 @@
     getBestPlayer,
     getRosterMetadata,
     buildRosterSystemMessage,
+    getLockedStake: () => userLockedStake,
+    getValidStakes: () => VALID_STAKES,
+    getMissingBetFields,
+    syncCapabilitiesIntro,
     syncRosterToVoice,
     findPlayerByName,
     findUnknownPlayerMention,
@@ -1319,11 +1757,15 @@
     isTournamentNavIntent,
     isSwitchPlayerIntent,
     isConfirmIntent,
+    isFillSlipIntent,
+    canFillSlip,
     hasUserPlayerLock,
     fuzzyFindPlayer,
     selectTournament,
     summarizeTournament,
     getActiveTournament: () => activeTournament,
+    getBoardState,
+    syncBoardToVoice,
     get flowState() { return yukiFlowState; },
   };
 })();

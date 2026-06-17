@@ -883,7 +883,7 @@
   function promptGreeting() {
     if (!isTransportOpen()) return;
     const text =
-      "Hey Yuki! I'm on the tennis betting screen — say a bright cheerful hello, hype girl energy, and mention you can help me pick a player!";
+      "Hey Yuki! I'm on the tennis betting screen. Say a bright hello and briefly explain you help me pick players, set bet amounts, prepare the slip, and place tennis bets — then ask what I want to do!";
     sendJson({
       type: "conversation.item.create",
       item: {
@@ -1375,8 +1375,8 @@
     const inConvo = opts.inConversation ?? isInConversation();
     const huge = opts.huge ?? isHugeEvent(type);
     const lines = {
-      WIN:  `System: Tennis bet — player won +${payload.amount || payload.net || "?"} credits on ${payload.player || "their pick"}.`,
-      LOSE: `System: Tennis bet — player lost ${payload.amount || payload.chip || "?"} credits on ${payload.player || "their pick"}.`,
+      WIN:  `System: Tennis bet WON — +${payload.amount || payload.net || "?"} credits on ${payload.player || "their pick"} (${payload.tournament || "tennis"} @ ${payload.odds ?? "?"}).`,
+      LOSE: `System: Tennis bet LOST — −${payload.amount || payload.chip || "?"} credits on ${payload.player || "their pick"} (${payload.tournament || "tennis"} @ ${payload.odds ?? "?"}). The user's pick was ${payload.player || "unknown"} — use this exact name.`,
       IDLE: `System: The player is browsing tennis matches.`,
     };
     let text = lines[type] || `System: Betting event ${type}.`;
@@ -1427,7 +1427,7 @@
 
     const prompts = {
       WIN:  `[Tennis bet win! +${payload.amount || payload.net} on ${payload.player || "their pick"}. Brief happy hype — one short line!]${upbeat}`,
-      LOSE: `[Tennis bet loss — lost ${payload.amount || payload.chip}. Quick upbeat encouragement — "next one!" energy, no pity. One line.]${upbeat}`,
+      LOSE: `[Tennis bet loss — ${payload.player || "their pick"} lost, −${payload.amount || payload.chip}. Quick upbeat encouragement — one line. Use the exact player name ${payload.player || "they picked"}.]${upbeat}`,
     };
     const text = prompts[type];
     if (!text) return false;
