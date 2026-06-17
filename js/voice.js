@@ -405,6 +405,7 @@
   function handleYukiTranscript(text) {
     if (!text) return;
     if (window.CharacterMemory) window.CharacterMemory.addTurn("yuki", text);
+    emit("voice:transcript", { text, role: "yuki" });
   }
 
   function backendWsUrl(base) {

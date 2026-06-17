@@ -23,7 +23,8 @@
         "2. Ask stake amount if not given (valid: 10, 25, 50, 100). Preserve the exact amount the user states.\n" +
         "3. Summarize player + stake + odds + potential return.\n" +
         "4. Ask for confirmation BEFORE filling the bet slip.\n" +
-        "5. Tell them to tap PLACE BET after the slip is filled.\n\n" +
+        "5. ONLY say the slip is filled after a System message containing 'Bet slip filled'. Stake-only replies update the preview — acknowledge the amount, do not claim filled.\n" +
+        "6. Tell them to tap PLACE BET after the slip is filled.\n\n" +
         "VOICE RULES:\n" +
         "- Short replies: 5–14 words when possible.\n" +
         "- If the user interrupts or changes topic, follow their latest input — do not repeat old lines.\n" +

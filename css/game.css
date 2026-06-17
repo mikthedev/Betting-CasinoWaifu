@@ -39,7 +39,7 @@
   --phone-w:    430px;
   --phone-h:    900px;
   --bar-h:      52px;
-  --yuki-slot-h: clamp(72px, 11vh, 96px);
+  --yuki-slot-h: clamp(96px, 15vh, 120px);
 }
 
 *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -244,12 +244,17 @@ body.betting-mode {
 }
 
 .yuki-slot--bar .yuki-bar {
-  --yuki-h: calc(var(--yuki-slot-h) - 6px);
+  --yuki-h: calc(var(--yuki-slot-h) - 4px);
   --slide-depth: calc(var(--yuki-slot-h) + 18px);
   align-items: flex-end;
 }
 
 .yuki-slot--bar .yuki-side-btn { width: 22px; height: 22px; font-size: 11px; }
+.yuki-slot--bar .yuki-char-wrap,
+.yuki-slot--bar .yuki-tap-target {
+  height: var(--yuki-h);
+  max-height: var(--yuki-h);
+}
 
 @media (min-width: 900px) {
   body.betting-mode { gap: 56px; padding: 24px; }

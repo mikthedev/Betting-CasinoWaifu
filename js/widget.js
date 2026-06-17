@@ -104,7 +104,7 @@
               <span class="pop-icon">🔊</span>
             </button>
 
-            <button type="button" class="yuki-body yuki-char-wrap yuki-tap-target" id="yuki-char-wrap" title="Tap Yuki">
+            <button type="button" class="yuki-body yuki-char-wrap yuki-tap-target" id="yuki-char-wrap" title="Tap Yuki to talk">
               <div class="yuki-glow"></div>
               <div class="listen-ring" id="listen-ring"></div>
               <img class="yuki-char" id="yuki-char" src="${sprites.idle}" alt="Yuki" draggable="false" />
@@ -675,6 +675,11 @@
           return;
         }
 
+        if (window.Sports.isPickStrategyIntent?.(t) && !window.Sports.hasUserPlayerLock?.()) {
+          window.Sports.handlePickIntent(t);
+          return;
+        }
+
         if (window.Sports.isSwitchPlayerIntent?.(t)) {
           window.Sports.handleSwitchPlayerIntent();
           return;
@@ -710,7 +715,7 @@
         const wantsRecommendation = isBestQuery
           || /\b(recommend|suggestion|who should|best pick|top pick|your pick)\b/.test(t);
         if (wantsRecommendation && !window.Sports.hasUserPlayerLock?.()) {
-          window.Sports.handleBestPlayerIntent(t);
+          window.Sports.handlePickIntent(t);
           return;
         }
       }

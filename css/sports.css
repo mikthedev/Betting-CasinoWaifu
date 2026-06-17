@@ -137,7 +137,7 @@
 /* ── match list (natural flow inside scroll area) ─────────────────────────────── */
 .sports-matches {
   flex: 1;
-  padding: 6px 10px 12px;
+  padding: 6px 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -151,13 +151,14 @@
   overflow: hidden;
   transition: border-color 0.2s;
   position: relative;
+  scroll-margin-top: 72px;
 }
 .match-card.has-selection {
   border-color: var(--border-accent);
 }
 .match-card.yuki-highlight {
   border-color: var(--green);
-  box-shadow: 0 0 0 1px var(--green), 0 4px 24px var(--green-dim);
+  box-shadow: 0 0 0 2px var(--green), 0 4px 24px var(--green-dim);
   animation: cardPulse 0.6s ease;
 }
 @keyframes cardPulse {
@@ -444,7 +445,50 @@
   padding: 0 4px;
 }
 
+/* ── yuki confirm bar (between matches and Yuki — not inside match card) ───── */
+.yuki-confirm-slot {
+  flex-shrink: 0;
+  background: var(--bg-1);
+  border-top: 1px solid rgba(29, 185, 106, 0.3);
+}
+.yuki-confirm-slot[hidden] { display: none !important; }
+
+.yuki-confirm-slot .yuki-suggest-banner {
+  border-top: none;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+.yuki-confirm-slot .suggest-body {
+  gap: 1px;
+}
+
+.yuki-confirm-slot .suggest-text {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.yuki-confirm-slot .suggest-stake {
+  font-size: 10px;
+}
+
+.yuki-confirm-slot .suggest-confirm {
+  padding: 6px 9px;
+  font-size: 9px;
+}
+
+.yuki-confirm-slot .suggest-dismiss {
+  width: 26px;
+  height: 26px;
+}
+
 /* ── yuki slot inside sports screen ─────────────────────────────────────────── */
+.sports-screen {
+  --yuki-slot-h: clamp(96px, 15vh, 120px);
+}
+
 .sports-screen .yuki-slot--bar {
   flex-shrink: 0;
   z-index: 4;
@@ -617,9 +661,7 @@
 /* ── Yuki suggestion row (in card flow — no overlap with stats) ─────────────── */
 .match-card.has-yuki-suggest {
   border-color: var(--green);
-  box-shadow:
-    0 0 0 1px rgba(29, 185, 106, 0.45),
-    0 10px 32px rgba(29, 185, 106, 0.14);
+  box-shadow: 0 0 0 1px rgba(29, 185, 106, 0.35);
 }
 
 .yuki-suggest-banner {
@@ -767,7 +809,7 @@
 /* ── mobile tweaks ──────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .sports-screen {
-    --yuki-slot-h: clamp(54px, 8.5vh, 68px);
+    --yuki-slot-h: clamp(92px, 14vh, 112px);
   }
 
   .sports-tabs { padding: 6px 10px 4px; gap: 5px; }
@@ -794,7 +836,7 @@
 }
 
 @media (max-width: 480px) and (max-height: 700px) {
-  .sports-screen { --yuki-slot-h: 50px; }
+  .sports-screen { --yuki-slot-h: clamp(84px, 13vh, 100px); }
   .sports-matches { padding: 3px 8px 10px; gap: 5px; }
   .match-players  { gap: 5px; padding: 5px 9px 7px; }
   .player-odds-btn { padding: 7px 4px 6px; }

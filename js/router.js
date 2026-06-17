@@ -25,6 +25,7 @@
     const board = window.Sports?.getBoardState?.() ?? {};
     const roster = window.Sports?.getRosterMetadata?.() ?? {};
     const bestInView = board.best_in_view;
+    const underdogInView = board.underdog_in_view;
     return {
       app: "betting-casinowaifu",
       balance: window.Betting?.getBalance?.() ?? 0,
@@ -37,6 +38,12 @@
       best_player: bestInView?.name ?? null,
       best_odds: bestInView?.odds ?? null,
       best_player_tournament: bestInView?.tournament ?? null,
+      underdog_player: underdogInView?.name ?? null,
+      underdog_odds: underdogInView?.odds ?? null,
+      underdog_rank: underdogInView?.rank ?? null,
+      underdog_tournament: underdogInView?.tournament ?? null,
+      tennis_rules:
+        "Underdog = higher decimal odds / lower rank. Favorite = lower odds. Never call #1 seeds underdogs. Use underdog_player for underdog requests.",
       visible_matches: board.visible_matches ?? roster.visible_matches ?? [],
       visible_player_names: board.visible_player_names ?? roster.visible_player_names ?? [],
       bet_slip: board.bet_slip ?? null,
