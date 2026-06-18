@@ -288,9 +288,14 @@
   border-color: var(--border-accent);
 }
 .player-odds-btn.yuki-suggested {
-  background: rgba(29, 185, 106, 0.12);
+  background: rgba(29, 185, 106, 0.18);
   border-color: var(--green);
-  box-shadow: 0 0 0 2px rgba(29, 185, 106, 0.35);
+  box-shadow: 0 0 0 2px rgba(29, 185, 106, 0.45);
+  animation: yukiSuggestPulse 1.6s ease-in-out infinite;
+}
+@keyframes yukiSuggestPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(29, 185, 106, 0.45); }
+  50%      { box-shadow: 0 0 0 3px rgba(29, 185, 106, 0.7), 0 0 16px rgba(29, 185, 106, 0.25); }
 }
 .player-odds-btn.selected.yuki-suggested {
   box-shadow: 0 0 0 2px rgba(29, 185, 106, 0.45);

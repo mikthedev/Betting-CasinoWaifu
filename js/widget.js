@@ -540,23 +540,21 @@
   }
 
   function showReaction(reaction, eventType, payload = {}) {
-    reactionUntil  = Date.now() + 3400;
+    const isOutcome = eventType === "WIN" || eventType === "LOSE";
+    reactionUntil  = Date.now() + (isOutcome ? 4800 : 3400);
     returnEmotion  = reaction.emotion;
     setEmotion(reaction.emotion);
     if (window.CharacterMemory) window.CharacterMemory.setMood(reaction.emotion);
 
     const canVoice  = !userMuted && voiceActive && window.Voice.isConnected();
     const inConvo   = canVoice && window.Voice.isInConversation?.();
+    const inGrace   = window.Voice.isStartupGrace?.();
     let voiceReacted = false;
-    if (canVoice) {
-      if (eventType === "IDLE") {
-        voiceReacted = window.Voice.reactToGameEvent(eventType, payload);
-      } else {
-        voiceReacted = window.Voice.reactToGameEvent(eventType, payload);
-      }
+    if (canVoice && !(eventType === "IDLE" && inGrace)) {
+      voiceReacted = window.Voice.reactToGameEvent(eventType, payload);
     }
 
-    const skipToast = inConvo && eventType !== "IDLE";
+    const skipToast = inConvo && eventType !== "IDLE" && !isOutcome;
 
     if (isHidden) {
       toast(eventType === "IDLE" ? "Talk to me" : reaction.line,
@@ -564,12 +562,12 @@
             3500);
     } else if (isCompanion) {
       toast(reaction.line, eventClass(eventType), 3500);
-    } else if (eventType !== "IDLE" && !voiceReacted && !skipToast) {
-      toast(reaction.line, eventClass(eventType), 2600);
+    } else if (eventType !== "IDLE" && (!voiceReacted || isOutcome) && !skipToast) {
+      toast(reaction.line, eventClass(eventType), isOutcome ? 3200 : 2600);
     }
 
-    if (!isHidden && eventType !== "IDLE" && (!inConvo || false)) nudge();
-    if (eventType === "WIN" && !isHidden && !inConvo) burstConfetti();
+    if (!isHidden && isOutcome) nudge();
+    if (eventType === "WIN" && !isHidden) burstConfetti();
 
     setTimeout(() => {
       if (inGameReaction()) return;
@@ -577,7 +575,7 @@
       else if (ui.root.classList.contains("listening")) setEmotion(vibeListeningEmotion(userVibe));
       else if (Date.now() < sentimentEmotionUntil) return;
       else setEmotion(E.IDLE);
-    }, 3400);
+    }, isOutcome ? 4800 : 3400);
   }
 
   function wireEvents() {
@@ -704,6 +702,15 @@
           return;
         }
 
+        if (window.VoiceBetting?.detectPlaceBetCommand?.(t)) {
+          const handled = window.VoiceBetting.handleUserSpeech(t);
+          if (handled.needsConsent) {
+            window.VoiceBetting.requestDelegateConsent();
+            return;
+          }
+          if (handled.executed || handled.hint) return;
+        }
+
         if (/\b(bet|pick|choose|want|go with|on|back)\b/.test(t)) {
           const unknown = window.Sports.findUnknownPlayerMention?.(t);
           if (unknown) {
@@ -754,6 +761,7 @@
       if (ui.root?.classList.contains("listening")) return false;
       if (Date.now() - talkingStartedAt < 3000) return false;
       if (window.Voice?.isInConversation?.()) return false;
+      if (window.Voice?.isStartupGrace?.()) return false;
       const current = ui.root?.dataset?.emotion;
       if (current && current !== E.IDLE && current !== E.HAPPY) return false;
       return true;

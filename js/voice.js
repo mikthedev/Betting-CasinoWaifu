@@ -53,6 +53,8 @@
   let currentResponseText = "";
   let audioUnlocked = false;
   let greetingSent = false;
+  let lastSyncedUserName = null;
+  let startupGraceUntil = 0;
   let connectPromise = null;
   let webrtcCfg = null;
 
@@ -79,6 +81,7 @@
 
   const HUGE_EVENTS = new Set([]);
   const OUTCOME_EVENTS = new Set(["WIN", "LOSE"]);
+  const PRIORITY_OUTCOME_EVENTS = new Set(["WIN", "LOSE"]);
   const AMBIENT_EVENTS = new Set(["IDLE"]);
 
   const emit = (name, data) => bus && bus.emit(name, data);
@@ -119,8 +122,25 @@
     return HUGE_EVENTS.has(type);
   }
 
-  function injectUserPrompt(text) {
+  function isStartupGrace() {
+    return Date.now() < startupGraceUntil;
+  }
+
+  function beginStartupGrace(ms = 60000) {
+    startupGraceUntil = Date.now() + ms;
+    const now = Date.now();
+    lastSilencePromptAt = now;
+    lastUserSpeechAt = now;
+    lastAgentSpeechEndAt = now;
+  }
+
+  function isPriorityOutcome(type) {
+    return PRIORITY_OUTCOME_EVENTS.has(type);
+  }
+
+  function injectUserPrompt(text, { priority = false } = {}) {
     if (!isTransportOpen() || !sessionReady || muted) return false;
+    if (!priority && isStartupGrace()) return false;
     if (agentSpeaking) {
       interruptPlayback();
       if (isTransportOpen()) sendJson({ type: "response.cancel" });
@@ -143,11 +163,15 @@
     const tickMs = 5000;
     silenceTimer = setInterval(() => {
       if (!sessionReady || muted || agentSpeaking || userSpeaking) return;
+      if (isStartupGrace()) return;
       if (isInConversation()) return;
       const now = Date.now();
-      const userQuiet = !lastUserSpeechAt || now - lastUserSpeechAt >= (cfg.EVENT_SYSTEM?.userSilenceMs ?? 20000);
-      const yukiQuiet = !lastAgentSpeechEndAt || now - lastAgentSpeechEndAt >= 14000;
-      const promptGap = now - lastSilencePromptAt >= (cfg.EVENT_SYSTEM?.silencePromptCooldownMs ?? 55000);
+      const userSilenceMs = cfg.EVENT_SYSTEM?.userSilenceMs ?? 20000;
+      const yukiSilenceMs = 14000;
+      const promptCooldownMs = cfg.EVENT_SYSTEM?.silencePromptCooldownMs ?? 55000;
+      const userQuiet = lastUserSpeechAt > 0 && now - lastUserSpeechAt >= userSilenceMs;
+      const yukiQuiet = lastAgentSpeechEndAt > 0 && now - lastAgentSpeechEndAt >= yukiSilenceMs;
+      const promptGap = lastSilencePromptAt > 0 && now - lastSilencePromptAt >= promptCooldownMs;
       if (userQuiet && yukiQuiet && promptGap) {
         promptSilenceBreak();
       }
@@ -162,13 +186,12 @@
   }
 
   function promptSilenceBreak() {
-    if (!isTransportOpen() || muted || isInConversation()) return false;
+    if (!isTransportOpen() || muted || isInConversation() || isStartupGrace()) return false;
     lastSilencePromptAt = Date.now();
 
     const promptsByVibe = {
       sad: [
         "[Quiet moment. They were down earlier — one warm beat, then something cozy or fun to lift the mood. Upbeat, not somber. Max 12 words.]",
-        "[Still hanging out. Playful or cozy check-in — find the fun angle. Max 12 words.]",
       ],
       worried: [
         "[They seemed stressed. Reassure with a smile — light, optimistic, maybe a tiny joke. Max 12 words.]",
@@ -180,7 +203,6 @@
       ],
       happy: [
         "[Quiet moment. Warm curious question — their day, a game, music, anything fun. Max 12 words.]",
-        "[Still hanging out. Wonder what they're up to — cozy and curious. Max 12 words.]",
       ],
       excited: [
         "[Quiet after some hype. Keep energy up but ask something genuine. Max 12 words.]",
@@ -198,7 +220,7 @@
   }
 
   function promptIdleConversation() {
-    if (!isTransportOpen() || muted || isInConversation()) return false;
+    if (!isTransportOpen() || muted || isInConversation() || isStartupGrace()) return false;
     const now = Date.now();
     if (now - lastSilencePromptAt < (cfg.EVENT_SYSTEM?.silencePromptCooldownMs ?? 55000)) return false;
     lastSilencePromptAt = now;
@@ -399,12 +421,49 @@
       emit("voice:vibe", { vibe, previous: prevVibe });
       if (window.CharacterMemory) window.CharacterMemory.setUserVibe(vibe);
     }
-    if (window.CharacterMemory) window.CharacterMemory.addTurn("user", text);
+    if (window.CharacterMemory) {
+      const prevName = window.CharacterMemory.getUserName?.();
+      window.CharacterMemory.addTurn("user", text);
+      const newName = window.CharacterMemory.getUserName?.();
+      if (newName && newName !== prevName) syncUserNameToVoice();
+    }
+
+    if (window.VoiceBetting?.handleUserSpeech) {
+      const handled = window.VoiceBetting.handleUserSpeech(text);
+      if (handled.needsConsent) {
+        sendContextSilent(`System: ${handled.hint}`);
+        window.VoiceBetting.requestDelegateConsent().then((granted) => {
+          if (!granted) return;
+          const retry = window.VoiceBetting.handleUserSpeech(text);
+          if (retry.hint) sendContextSilent(`System: ${retry.hint}`);
+          if (retry.executed) window.Sports?.syncBoardToVoice?.();
+        });
+      } else {
+        if (handled.hint) sendContextSilent(`System: ${handled.hint}`);
+        if (handled.executed) window.Sports?.syncBoardToVoice?.();
+      }
+    }
+  }
+
+  function notifyDelegateConsent(granted) {
+    if (!isTransportOpen() || !sessionReady) return;
+    if (granted) {
+      sendContextSilent(`System: ${window.VoiceBetting?.DELEGATE_CONSENT_HINT || "Player consented to voice-delegated bet placement."}`);
+    } else {
+      sendContextSilent(
+        "System: Player declined voice-delegated bet placement. Do not submit bets for them — they can still fill the slip by voice and tap PLACE BET manually."
+      );
+    }
   }
 
   function handleYukiTranscript(text) {
     if (!text) return;
     if (window.CharacterMemory) window.CharacterMemory.addTurn("yuki", text);
+    if (window.VoiceBetting?.handleYukiSpeech) {
+      const handled = window.VoiceBetting.handleYukiSpeech(text);
+      if (handled.hint) sendContextSilent(`System: ${handled.hint}`);
+      if (handled.executed) window.Sports?.syncBoardToVoice?.();
+    }
     emit("voice:transcript", { text, role: "yuki" });
   }
 
@@ -770,6 +829,7 @@
 
       case "session.updated":
         sessionReady = true;
+        beginStartupGrace(90000);
         emit("voice:ready");
         resumeMicPipeline();
         maybeStartConversation();
@@ -832,6 +892,9 @@
           if (sentiment) emit("voice:sentiment", { emotion: sentiment });
           handleYukiTranscript(textSnapshot);
           currentResponseText = "";
+          if (greetingSent && isStartupGrace()) {
+            lastAgentSpeechEndAt = Date.now();
+          }
         }
         if (transport === "webrtc") {
           agentSpeaking = false;
@@ -881,10 +944,25 @@
     promptGreeting();
   }
 
+  function syncUserNameToVoice() {
+    const name = window.CharacterMemory?.getUserName?.();
+    if (!name || name === lastSyncedUserName) return;
+    lastSyncedUserName = name;
+    sendContextSilent(
+      `USER_NAME: ${name}. The user's name is ${name} — remember it for this session. Use it occasionally in friendly replies (not every line).`
+    );
+  }
+
   function promptGreeting() {
     if (!isTransportOpen()) return;
-    const text =
-      "Hey Yuki! I'm on the tennis betting screen. Say a bright hello and briefly explain you help me pick players, set bet amounts, prepare the slip, and place tennis bets — then ask what I want to do!";
+    const name = window.CharacterMemory?.getUserName?.();
+    syncUserNameToVoice();
+    beginStartupGrace(90000);
+
+    const text = name
+      ? `Hey Yuki! Voice just connected on the tennis betting screen. Welcome ${name} back warmly — you're Yuki, their friendly betting companion. In 2 short sentences: say hi to ${name}, mention you're here to help with their bets, and ask what they'd like to play today. Keep it natural and upbeat. No feature lists.`
+      : "Hey Yuki! Voice just connected on the tennis betting screen. Give a great first greeting in 2–3 short sentences: (1) introduce yourself as Yuki, (2) say you're their companion here to help with tennis bets — finding picks, setting stakes, and filling the slip, (3) ask what you should call them. Warm, friendly, natural — like meeting a fun betting buddy. Do NOT list every feature or give a long speech. Do NOT add a follow-up line like \"just hanging out\" or \"ready to dive into matches\" — stop after the greeting and wait for them.";
+
     sendJson({
       type: "conversation.item.create",
       item: {
@@ -967,6 +1045,7 @@
     agentSpeaking = false;
     userSpeaking = false;
     greetingSent = false;
+    startupGraceUntil = 0;
     lastUserSpeechAt = 0;
     lastAgentSpeechEndAt = 0;
     lastSilencePromptAt = 0;
@@ -1364,7 +1443,8 @@
         content: [{ type: "input_text", text }],
       },
     });
-    // Prompt a response so Yuki speaks
+    // Do not stack a spoken response on top of the opening greeting
+    if (isStartupGrace()) return;
     sendJson({ type: "response.create" });
   }
 
@@ -1373,15 +1453,18 @@
   // ---------------------------------------------------------------------------
   function notifyGameEvent(type, payload = {}, opts = {}) {
     if (!isTransportOpen() || !sessionReady) return;
+    const priorityOutcome = isPriorityOutcome(type);
     const inConvo = opts.inConversation ?? isInConversation();
     const huge = opts.huge ?? isHugeEvent(type);
     const lines = {
       WIN:  `System: Tennis bet WON — +${payload.amount || payload.net || "?"} credits on ${payload.player || "their pick"} (${payload.tournament || "tennis"} @ ${payload.odds ?? "?"}).`,
-      LOSE: `System: Tennis bet LOST — −${payload.amount || payload.chip || "?"} credits on ${payload.player || "their pick"} (${payload.tournament || "tennis"} @ ${payload.odds ?? "?"}). The user's pick was ${payload.player || "unknown"} — use this exact name.`,
+      LOSE: `System: Tennis bet LOST — −${payload.amount || payload.chip || "?"} credits on ${payload.player || "their pick"} (${payload.tournament || "tennis"} @ ${payload.odds ?? "?"}). The user's pick was ${payload.player || "unknown"} — use this exact name. Respond empathetically; never laugh, mock, or use sarcasm.`,
       IDLE: `System: The player is browsing tennis matches.`,
     };
     let text = lines[type] || `System: Betting event ${type}.`;
-    if (inConvo && !huge && OUTCOME_EVENTS.has(type)) {
+    if (priorityOutcome) {
+      text += " React now with one short spoken line — this is the bet result the user is waiting for.";
+    } else if (inConvo && !huge && OUTCOME_EVENTS.has(type)) {
       text = `Background note (DO NOT mention now — keep the current conversation going naturally): ${text}`;
     } else if (inConvo && AMBIENT_EVENTS.has(type)) {
       text = `Background note (ignore for now unless it fits the chat): ${text}`;
@@ -1396,45 +1479,54 @@
     });
   }
 
-  /** When voice is live, Yuki speaks a brief reaction — respects conversation priority. */
+  /** When voice is live, Yuki speaks a brief reaction — bet outcomes always get priority. */
   function reactToGameEvent(type, payload = {}) {
     if (!isTransportOpen() || !sessionReady) return false;
     if (muted) return false;
+    if (type === "IDLE" && isStartupGrace()) return false;
 
     if (type === "IDLE") return promptIdleConversation();
 
     const inConvo = isInConversation();
     const huge = isHugeEvent(type);
     const isOutcome = OUTCOME_EVENTS.has(type);
+    const priorityOutcome = isPriorityOutcome(type);
     const isAmbient = AMBIENT_EVENTS.has(type);
 
-    notifyGameEvent(type, payload, { inConversation: inConvo, huge });
+    notifyGameEvent(type, payload, {
+      inConversation: inConvo && !priorityOutcome,
+      huge: huge || priorityOutcome,
+    });
 
     if (isAmbient && inConvo) return false;
-    if (inConvo && isOutcome && !huge) return false;
-    if (isDeepConversation() && inConvo && !huge) return false;
+    if (inConvo && isOutcome && !huge && !priorityOutcome) return false;
+    if (isDeepConversation() && inConvo && !huge && !priorityOutcome) return false;
 
     const now = Date.now();
-    if (isOutcome && !huge && now - lastOutcomeVoiceAt < outcomeVoiceCooldownMs()) return false;
-    if ((agentSpeaking || userSpeaking) && !huge) return false;
+    if (isOutcome && now - lastOutcomeVoiceAt < outcomeVoiceCooldownMs()) return false;
 
-    if (agentSpeaking && huge) {
-      interruptPlayback();
-      if (isTransportOpen()) sendJson({ type: "response.cancel" });
+    if ((agentSpeaking || userSpeaking) && !huge && !priorityOutcome) return false;
+
+    if ((agentSpeaking || userSpeaking) && (huge || priorityOutcome)) {
+      if (agentSpeaking) {
+        interruptPlayback();
+        if (isTransportOpen()) sendJson({ type: "response.cancel" });
+      }
     }
     userSpeaking = false;
 
-    const upbeat = " Stay bright and encouraging — no pity, no somber tone.";
+    const winTone = " Stay bright and encouraging — one short line.";
+    const lossTone = " Be empathetic and respectful — acknowledge the loss briefly, no laughing, no mockery, no sarcasm. Offer a next step (another pick, stake, or tab). One short line.";
 
     const prompts = {
-      WIN:  `[Tennis bet win! +${payload.amount || payload.net} on ${payload.player || "their pick"}. Brief happy hype — one short line!]${upbeat}`,
-      LOSE: `[Tennis bet loss — ${payload.player || "their pick"} lost, −${payload.amount || payload.chip}. Quick upbeat encouragement — one line. Use the exact player name ${payload.player || "they picked"}.]${upbeat}`,
+      WIN:  `[Tennis bet win! +${payload.amount || payload.net} on ${payload.player || "their pick"}. Brief happy hype — one short line!]${winTone}`,
+      LOSE: `[Tennis bet loss — ${payload.player || "their pick"} lost, −${payload.amount || payload.chip}. Use the exact player name ${payload.player || "they picked"}.]${lossTone}`,
     };
     const text = prompts[type];
     if (!text) return false;
 
     lastOutcomeVoiceAt = now;
-    return injectUserPrompt(text);
+    return injectUserPrompt(text, { priority: priorityOutcome });
   }
 
   function setMuted(value) {
@@ -1548,9 +1640,12 @@
     isMuted: () => muted,
     notifyGameEvent,
     reactToGameEvent,
+    notifyDelegateConsent,
     sendContext,
     sendContextSilent,
+    syncUserNameToVoice,
     isInConversation,
+    isStartupGrace,
     getConversationVibe,
     requestMic,
     setVoiceVolume,

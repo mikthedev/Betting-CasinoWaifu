@@ -107,8 +107,72 @@
   }
 
   function extractName(text) {
-    const m = (text || "").match(/\b(?:i am|i'm|im|my name is|call me)\s+([a-z][a-z'-]{1,20})/i);
-    return m ? m[1].replace(/^\w/, (c) => c.toUpperCase()) : null;
+    const t = (text || "").trim();
+    if (!t) return null;
+
+    const patterns = [
+      /\b(?:i am|i'm|im|my name is|call me|they call me|name is|name's)\s+([a-z][a-z'-]{1,20})\b/i,
+      /\b(?:it's|its|this is|i'm)\s+([a-z][a-z'-]{1,20})\b/i,
+      /^([a-z][a-z'-]{1,20})$/i,
+    ];
+
+    for (const re of patterns) {
+      const m = t.match(re);
+      if (m?.[1]) {
+        const candidate = capitalizeName(m[1]);
+        if (isLikelyPersonName(candidate)) return candidate;
+      }
+    }
+
+    return tryBareNameAfterPrompt(t);
+  }
+
+  function capitalizeName(s) {
+    return s.replace(/^\w/, (c) => c.toUpperCase());
+  }
+
+  const ROSTER_FIRST_NAMES = new Set([
+    "carlos", "novak", "jannik", "alexander", "taylor", "daniil", "holger", "ben",
+    "stefanos", "alex", "andrey", "jack", "frances", "lorenzo", "alexander", "tomas",
+    "casper", "hubert", "sinner", "zverev", "fritz", "medvedev", "rune", "shelton",
+    "tsitsipas", "deminaur", "rublev", "draper", "tiafoe", "musetti", "machac", "hurkacz",
+  ]);
+
+  const COMMON_NON_NAMES = new Set([
+    "yes", "no", "ok", "okay", "sure", "yep", "yeah", "nope", "thanks", "thank", "hi", "hey",
+    "hello", "please", "bet", "tennis", "wimbledon", "fill", "place", "confirm",
+  ]);
+
+  function isLikelyPersonName(name) {
+    if (!name || name.length < 2) return false;
+    const lower = name.toLowerCase();
+    if (COMMON_NON_NAMES.has(lower)) return false;
+    if (ROSTER_FIRST_NAMES.has(lower)) return false;
+    if (/^\d+$/.test(name)) return false;
+    return true;
+  }
+
+  function tryBareNameAfterPrompt(text) {
+    const trimmed = (text || "").trim();
+    if (!trimmed || trimmed.split(/\s+/).length > 2) return null;
+
+    const turns = state.turns.slice(-4);
+    const yukiAskedName = turns.some(turn =>
+      turn.role === "yuki" && /\b(your name|what should i call|call you|who am i speaking|introduce yourself)\b/i.test(turn.text)
+    );
+    if (!yukiAskedName) return null;
+
+    const word = trimmed.replace(/[.!?,]+$/, "");
+    const candidate = capitalizeName(word);
+    return isLikelyPersonName(candidate) ? candidate : null;
+  }
+
+  function setUserName(name) {
+    const n = (name || "").trim();
+    if (!n || !isLikelyPersonName(capitalizeName(n))) return false;
+    state.context.userName = capitalizeName(n);
+    save();
+    return true;
   }
 
   /** Update rolling session context from a bet outcome. */
@@ -166,6 +230,7 @@
     getTopTopic,
     getTopics,
     getUserName,
+    setUserName,
     reset,
   };
 })();

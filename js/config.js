@@ -32,7 +32,7 @@ window.YUKI_CONFIG = {
     conversationGraceMs: 18000,
     deepConversationGraceMs: 28000,
     agentSpeechGraceMs: 9000,
-    outcomeVoiceCooldownMs: 10000,
+    outcomeVoiceCooldownMs: 4000,
   },
 
   // ---------------------------------------------------------------------------

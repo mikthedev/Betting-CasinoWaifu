@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "node scripts/ensure-recorder.mjs",
     "start": "node server/index.js",
+    "predev": "node scripts/ensure-recorder.mjs",
     "dev": "node server/index.js",
     "vercel-build": "node scripts/vercel-build.mjs",
     "test:realtime": "node scripts/test-realtime.mjs",

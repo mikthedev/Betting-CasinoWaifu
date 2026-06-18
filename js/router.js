@@ -54,7 +54,10 @@
         board.active_tab && board.active_tab !== "all"
           ? `Player is viewing ${board.active_tab_label} ONLY. Recommend and discuss ONLY: ${(board.visible_player_names || []).join(", ")}.`
           : "Player sees all tournaments on screen.",
-      roster_rules: "Only suggest or fill bets for players in available_player_names. Never invent players.",
+      roster_rules:
+        "Only suggest or fill bets for players in available_player_names. Never invent players. Only offer features the app supports; state limits clearly if asked for unsupported actions.",
+      loss_rules:
+        "On losses: empathetic, respectful, never laugh or mock. Short reply; suggest next supported option.",
       ...overrides,
     };
   }

@@ -17,14 +17,14 @@
 
   const LINES = {
     WIN:     ["Nice pick!", "Winner~ 🎾", "Let's go!", "You got it!"],
-    LOSE:    ["Next match!", "We bounce back!", "Unlucky — next one's ours!", "Almost~"],
+    LOSE:    ["Tough break — want another pick?", "That one didn't land. Try someone else?", "Respectfully noted — next match?", "Close one. Another stake or player?"],
     IDLE:    ["Hey~!", "What's up?", "Talk to me~", "Pick a player~", "Let's go~"],
   };
 
   function reactToOutcome(type) {
     switch (type) {
-      case "WIN":  return { emotion: EMOTION.HAPPY,   line: pick(LINES.WIN) };
-      case "LOSE": return { emotion: EMOTION.HAPPY,   line: pick(LINES.LOSE) };
+      case "WIN":  return { emotion: EMOTION.EXCITED, line: pick(LINES.WIN) };
+      case "LOSE": return { emotion: EMOTION.WORRIED, line: pick(LINES.LOSE) };
       case "IDLE": return { emotion: EMOTION.HAPPY,   line: pick(LINES.IDLE) };
       default:     return { emotion: EMOTION.HAPPY,   line: pick(LINES.IDLE) };
     }

@@ -24,6 +24,9 @@ Thumbs.db
 # local reference snapshots
 .ref-casinowaifu/
 
+# Local dev session recorder — never commit or push to Betting-CasinoWaifu
+local-testing/
+
 # IDE
 .vscode/
 .idea/
