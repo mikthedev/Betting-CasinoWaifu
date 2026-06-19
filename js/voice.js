@@ -74,10 +74,20 @@
   // Interaction priority — conversation beats small wins
   let lastUserSpeechAt = 0;
   let lastAgentSpeechEndAt = 0;
+  let lastAgentAudibleUntil = 0;
+  let lastAgentResponseWords = 0;
   let lastSilencePromptAt = 0;
   let lastOutcomeVoiceAt = 0;
+  let pendingOutcome = null;
+  let pendingOutcomeTimer = null;
   let silenceTimer = null;
   let conversationVibe = "happy";
+  let awaitingAgentResponse = false;
+  let webrtcAudioEndWatcher = null;
+  let lastPartialUserText = "";
+  let lastUserTranscript = "";
+  let lastUserWasShort = false;
+  let lastUserWantsDetail = false;
 
   const HUGE_EVENTS = new Set([]);
   const OUTCOME_EVENTS = new Set(["WIN", "LOSE"]);
@@ -99,7 +109,109 @@
   }
 
   function outcomeVoiceCooldownMs() {
-    return cfg.EVENT_SYSTEM?.outcomeVoiceCooldownMs ?? 10000;
+    return cfg.EVENT_SYSTEM?.outcomeVoiceCooldownMs ?? 4000;
+  }
+
+  function outcomeVoiceDeferMs() {
+    return cfg.EVENT_SYSTEM?.outcomeVoiceDeferMs ?? 1000;
+  }
+
+  function outcomeVoicePendingMaxMs() {
+    return cfg.EVENT_SYSTEM?.outcomeVoicePendingMaxMs ?? 12000;
+  }
+
+  function countWords(text) {
+    return (text || "").trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  function postSpeechListenMs(wordCount) {
+    const base = cfg.EVENT_SYSTEM?.postSpeechListenMs ?? 6500;
+    const perWord = cfg.EVENT_SYSTEM?.postSpeechListenMsPerWord ?? 50;
+    const cap = cfg.EVENT_SYSTEM?.postSpeechListenMsMax ?? 24000;
+    const words = wordCount ?? lastAgentResponseWords ?? 0;
+    if (words <= 12) return base;
+    return Math.min(base + Math.round(words * perWord), cap);
+  }
+
+  function extendListenWindowAfterSpeech(wordCount) {
+    lastAgentAudibleUntil = Math.max(
+      lastAgentAudibleUntil,
+      Date.now() + postSpeechListenMs(wordCount)
+    );
+  }
+
+  function isWsPlaybackPending() {
+    if (scheduledSources.length > 0) return true;
+    return !!(playbackCtx && nextPlayTime > playbackCtx.currentTime + 0.08);
+  }
+
+  function isAgentAudioPending() {
+    if (agentSpeaking) return true;
+    if (speakingStopTimer || webrtcAudioEndWatcher) return true;
+    if (isWsPlaybackPending()) return true;
+    if (Date.now() < lastAgentAudibleUntil) return true;
+    return false;
+  }
+
+  function isActiveVoiceExchange() {
+    if (userSpeaking || isWaitingForAgentReply() || agentSpeaking || isWsPlaybackPending()) {
+      return true;
+    }
+    const now = Date.now();
+    const userOverlap = cfg.EVENT_SYSTEM?.outcomeUserSpeechOverlapMs ?? 3500;
+    const agentOverlap = cfg.EVENT_SYSTEM?.outcomeAgentSpeechOverlapMs ?? 2500;
+    if (lastUserSpeechAt && now - lastUserSpeechAt < userOverlap) return true;
+    if (lastAgentSpeechEndAt && now - lastAgentSpeechEndAt < agentOverlap) return true;
+    return false;
+  }
+
+  function markAwaitingAgentResponse() {
+    awaitingAgentResponse = true;
+    const waitMs = cfg.EVENT_SYSTEM?.agentResponseWaitMs ?? 50000;
+    lastAgentAudibleUntil = Math.max(lastAgentAudibleUntil, Date.now() + waitMs);
+  }
+
+  function clearAwaitingAgentResponse() {
+    awaitingAgentResponse = false;
+  }
+
+  function isWaitingForAgentReply() {
+    return awaitingAgentResponse;
+  }
+
+  function clearPendingOutcome() {
+    pendingOutcome = null;
+    if (pendingOutcomeTimer) {
+      clearTimeout(pendingOutcomeTimer);
+      pendingOutcomeTimer = null;
+    }
+  }
+
+  function schedulePendingOutcome(type, payload) {
+    pendingOutcome = { type, payload, queuedAt: Date.now() };
+    armPendingOutcomeFlush();
+  }
+
+  function armPendingOutcomeFlush(delayMs) {
+    if (!pendingOutcome) return;
+    if (pendingOutcomeTimer) clearTimeout(pendingOutcomeTimer);
+    pendingOutcomeTimer = setTimeout(flushPendingOutcome, delayMs ?? outcomeVoiceDeferMs());
+  }
+
+  function flushPendingOutcome() {
+    pendingOutcomeTimer = null;
+    if (!pendingOutcome || !sessionReady || muted) return;
+    if (Date.now() - pendingOutcome.queuedAt > outcomeVoicePendingMaxMs()) {
+      clearPendingOutcome();
+      return;
+    }
+    if (isActiveVoiceExchange() || isAgentAudioPending()) {
+      armPendingOutcomeFlush(800);
+      return;
+    }
+    const { type, payload } = pendingOutcome;
+    pendingOutcome = null;
+    deliverOutcomeReaction(type, payload);
   }
 
   function isDeepConversation() {
@@ -112,7 +224,7 @@
 
   function isInConversation() {
     const now = Date.now();
-    if (userSpeaking || agentSpeaking) return true;
+    if (userSpeaking || isWaitingForAgentReply() || isAgentAudioPending()) return true;
     if (lastUserSpeechAt && now - lastUserSpeechAt < conversationGraceMs()) return true;
     if (lastAgentSpeechEndAt && now - lastAgentSpeechEndAt < agentSpeechGraceMs()) return true;
     return false;
@@ -155,6 +267,7 @@
       },
     });
     sendJson({ type: "response.create" });
+    markAwaitingAgentResponse();
     return true;
   }
 
@@ -162,7 +275,7 @@
     stopSilenceWatcher();
     const tickMs = 5000;
     silenceTimer = setInterval(() => {
-      if (!sessionReady || muted || agentSpeaking || userSpeaking) return;
+      if (!sessionReady || muted || userSpeaking || isWaitingForAgentReply() || isAgentAudioPending()) return;
       if (isStartupGrace()) return;
       if (isInConversation()) return;
       const now = Date.now();
@@ -186,6 +299,7 @@
   }
 
   function promptSilenceBreak() {
+    if (!greetingSent) return false;
     if (!isTransportOpen() || muted || isInConversation() || isStartupGrace()) return false;
     lastSilencePromptAt = Date.now();
 
@@ -238,6 +352,7 @@
   }
 
   function emitSpeakingStop() {
+    stopWebRTCAudioEndWatcher();
     if (speakingStopTimer) {
       clearTimeout(speakingStopTimer);
       speakingStopTimer = null;
@@ -245,23 +360,35 @@
     emit("voice:speaking:stop");
     emit("voice:thinking:stop");
     if (!userSpeaking) emit("voice:listening:stop");
+    agentSpeaking = false;
     lastAgentSpeechEndAt = Date.now();
+    extendListenWindowAfterSpeech(lastAgentResponseWords);
+    clearAwaitingAgentResponse();
+    armPendingOutcomeFlush(900);
   }
 
   function deferSpeakingStopWS() {
-    if (!playbackCtx || nextPlayTime <= playbackCtx.currentTime) {
+    if (!isWsPlaybackPending()) {
       emitSpeakingStop();
       return;
     }
-    const delayMs = Math.ceil((nextPlayTime - playbackCtx.currentTime) * 1000) + 200;
+    const delayMs = playbackCtx
+      ? Math.ceil((nextPlayTime - playbackCtx.currentTime) * 1000) + 350
+      : 500;
+    lastAgentAudibleUntil = Math.max(lastAgentAudibleUntil, Date.now() + delayMs);
+    if (speakingStopTimer) {
+      clearTimeout(speakingStopTimer);
+      speakingStopTimer = null;
+    }
     speakingStopTimer = setTimeout(emitSpeakingStop, delayMs);
   }
 
   function estimateSpeakDuration(text) {
-    const words = (text || "").trim().split(/\s+/).filter(Boolean).length;
-    const WPM = 155;
+    const words = countWords(text);
+    const WPM = 128;
     const base = words > 0 ? Math.ceil((words / WPM) * 60 * 1000) : 3000;
-    return Math.max(base + 1000, 2000);
+    const buffer = Math.min(5000, 900 + words * 35);
+    return Math.max(base + buffer, 2500);
   }
 
   function startWebRTCLevelWatcher() {
@@ -317,11 +444,77 @@
       speakingStopTimer = null;
     }
     const delayMs = estimateSpeakDuration(text);
-    speakingStopTimer = setTimeout(() => {
+    lastAgentResponseWords = countWords(text);
+    waitForWebRTCAudioEnd(delayMs, () => {
       webrtcAgentTalking = false;
       agentSpeaking = false;
       emitSpeakingStop();
-    }, delayMs);
+    });
+  }
+
+  function stopWebRTCAudioEndWatcher() {
+    if (webrtcAudioEndWatcher) {
+      clearInterval(webrtcAudioEndWatcher);
+      webrtcAudioEndWatcher = null;
+    }
+  }
+
+  function waitForWebRTCAudioEnd(fallbackMs, onDone) {
+    stopWebRTCAudioEndWatcher();
+    if (speakingStopTimer) {
+      clearTimeout(speakingStopTimer);
+      speakingStopTimer = null;
+    }
+
+    const finish = () => {
+      stopWebRTCAudioEndWatcher();
+      if (speakingStopTimer) {
+        clearTimeout(speakingStopTimer);
+        speakingStopTimer = null;
+      }
+      onDone();
+    };
+
+    lastAgentAudibleUntil = Math.max(lastAgentAudibleUntil, Date.now() + fallbackMs);
+
+    if (!remoteAnalyser) {
+      speakingStopTimer = setTimeout(finish, fallbackMs);
+      return;
+    }
+
+    const data = new Uint8Array(remoteAnalyser.frequencyBinCount);
+    const FALL_RMS = 2.5;
+    const SILENCE_HOLD_MS = 1400;
+    const startedAt = Date.now();
+    const maxMs = fallbackMs + 4000;
+    let silentSince = 0;
+    let heardSpeech = webrtcAgentTalking;
+
+    webrtcAudioEndWatcher = setInterval(() => {
+      if (Date.now() - startedAt >= maxMs) {
+        finish();
+        return;
+      }
+
+      remoteAnalyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const d = data[i] - 128;
+        sum += d * d;
+      }
+      const rms = Math.sqrt(sum / data.length);
+
+      if (rms > FALL_RMS) {
+        heardSpeech = true;
+        silentSince = 0;
+        return;
+      }
+
+      if (!heardSpeech) return;
+
+      if (!silentSince) silentSince = Date.now();
+      if (Date.now() - silentSince >= SILENCE_HOLD_MS) finish();
+    }, 50);
   }
 
   function stopWebRTCLevelWatcher() {
@@ -411,8 +604,40 @@
     });
   }
 
+  function detectShortUtterance(text) {
+    return countWords(text) <= 10;
+  }
+
+  function detectUserNeedsExplanation(text) {
+    const t = (text || "").toLowerCase();
+    return (
+      /\b(explain|tell me more|walk me through|help me understand|i don't understand|never played|first time|new to)\b/.test(t) ||
+      /\b(how does|how do i|how to|what is|what are)\b[\s\S]{0,50}\b(bet|betting|work|works|slip|odds|stake|tennis)\b/.test(t)
+    );
+  }
+
+  const BRIEF_MATCH_HINT =
+    "Player spoke briefly. MATCH their length — under 12 words total. Answer first. No filler, no extra questions, no repeating odds.";
+
+  const EXPLAIN_HINT =
+    "Player wants to understand — explain like a friend. Simple casual words, 2–4 short sentences. Do NOT mention voice-delegated betting or consent unless they asked you to place bets for them.";
+
+  function notifyBriefReplyMode() {
+    sendContextSilent(BRIEF_MATCH_HINT);
+  }
+
+  function notifyExplainMode() {
+    sendContextSilent(EXPLAIN_HINT);
+  }
+
   function handleUserTranscript(text) {
     if (!text) return;
+    if (window.Sports?.isVoicePickRequest?.(text) && !window.Sports?.hasUserPlayerLock?.()) {
+      window.Sports.preparePickSuggestion?.(text);
+    }
+    lastUserTranscript = text;
+    lastUserWantsDetail = detectUserNeedsExplanation(text);
+    lastUserWasShort = detectShortUtterance(text);
     lastUserSpeechAt = Date.now();
     const prevVibe = conversationVibe;
     const vibe = updateConversationVibe(text);
@@ -426,6 +651,12 @@
       window.CharacterMemory.addTurn("user", text);
       const newName = window.CharacterMemory.getUserName?.();
       if (newName && newName !== prevName) syncUserNameToVoice();
+    }
+
+    if (lastUserWantsDetail) {
+      notifyExplainMode();
+    } else if (lastUserWasShort) {
+      notifyBriefReplyMode();
     }
 
     if (window.VoiceBetting?.handleUserSpeech) {
@@ -458,13 +689,23 @@
 
   function handleYukiTranscript(text) {
     if (!text) return;
-    if (window.CharacterMemory) window.CharacterMemory.addTurn("yuki", text);
+    const clean = window.Sports?.normalizeYukiSpeechText?.(text) || text;
+    if (window.CharacterMemory) window.CharacterMemory.addTurn("yuki", clean);
+    window.Sports?.absorbYukiSpeechSuggestion?.(clean);
+    if (window.Sports?.shouldRepromptPickSpeech?.(clean)) {
+      sendContextSilent(
+        "System: You spoke internal reasoning aloud (thought/thinking). NEVER say thought, thinking, or narrate reasoning. " +
+        "Name ONE roster player immediately — e.g. \"How about Frances Tiafoe\" — full name only, under 15 words."
+      );
+      sendJson({ type: "response.create" });
+      markAwaitingAgentResponse();
+    }
     if (window.VoiceBetting?.handleYukiSpeech) {
-      const handled = window.VoiceBetting.handleYukiSpeech(text);
+      const handled = window.VoiceBetting.handleYukiSpeech(clean);
       if (handled.hint) sendContextSilent(`System: ${handled.hint}`);
       if (handled.executed) window.Sports?.syncBoardToVoice?.();
     }
-    emit("voice:transcript", { text, role: "yuki" });
+    emit("voice:transcript", { text: clean, role: "yuki" });
   }
 
   function backendWsUrl(base) {
@@ -839,7 +1080,9 @@
 
       case "input_audio_buffer.speech_started":
         userSpeaking = true;
+        lastPartialUserText = "";
         lastUserSpeechAt = Date.now();
+        clearAwaitingAgentResponse();
         interruptPlayback();
         if (isTransportOpen()) {
           sendJson({ type: "response.cancel" });
@@ -850,6 +1093,9 @@
 
       case "input_audio_buffer.committed":
         userSpeaking = false;
+        if (window.Sports?.isVoicePickRequest?.(lastPartialUserText)) {
+          cancelPendingResponse();
+        }
         emit("voice:listening:stop");
         emit("voice:thinking:start");
         break;
@@ -880,6 +1126,9 @@
         if (msg.delta) {
           currentResponseText += msg.delta;
           emit("voice:transcript", { text: msg.delta, role: "yuki", partial: true });
+          if (window.Sports?.isAwaitingYukiPickSpeech?.()) {
+            window.Sports.absorbYukiSpeechSuggestion?.(currentResponseText);
+          }
           const midSentiment = detectSentiment(currentResponseText);
           if (midSentiment) emit("voice:sentiment", { emotion: midSentiment, midResponse: true });
         }
@@ -888,6 +1137,7 @@
       case "response.done": {
         const textSnapshot = currentResponseText;
         if (textSnapshot) {
+          lastAgentResponseWords = countWords(textSnapshot);
           const sentiment = detectSentiment(textSnapshot);
           if (sentiment) emit("voice:sentiment", { emotion: sentiment });
           handleYukiTranscript(textSnapshot);
@@ -921,7 +1171,11 @@
       // Also handle partial user transcript if Inworld sends it
       case "input_audio_buffer.speech_transcription.delta":
         if (msg.delta) {
+          lastPartialUserText += msg.delta;
           emit("voice:transcript", { text: msg.delta, role: "user", partial: true });
+          if (window.Sports?.prepareEarlyPickRequest?.(lastPartialUserText)) {
+            cancelPendingResponse();
+          }
         }
         break;
 
@@ -972,6 +1226,7 @@
       },
     });
     sendJson({ type: "response.create" });
+    markAwaitingAgentResponse();
   }
 
   function buildDefaultSessionUpdate() {
@@ -1025,6 +1280,7 @@
       speakingStopTimer = null;
     }
     stopWebRTCLevelWatcher();
+    stopWebRTCAudioEndWatcher();
     webrtcAgentTalking = false;
     try { remoteAnalyserSrc?.disconnect(); } catch (_) {}
     remoteAnalyserSrc = null;
@@ -1042,10 +1298,13 @@
   function cleanupSession(emitClosed) {
     stopLevelLoop();
     stopSilenceWatcher();
+    clearPendingOutcome();
     agentSpeaking = false;
     userSpeaking = false;
     greetingSent = false;
     startupGraceUntil = 0;
+    awaitingAgentResponse = false;
+    lastAgentAudibleUntil = 0;
     lastUserSpeechAt = 0;
     lastAgentSpeechEndAt = 0;
     lastSilencePromptAt = 0;
@@ -1410,7 +1669,9 @@
       speakingStopTimer = null;
     }
     stopWebRTCLevelWatcher();
+    stopWebRTCAudioEndWatcher();
     webrtcAgentTalking = false;
+    lastAgentAudibleUntil = 0;
     currentResponseText = "";
     if (agentSpeaking) {
       agentSpeaking = false;
@@ -1446,6 +1707,23 @@
     // Do not stack a spoken response on top of the opening greeting
     if (isStartupGrace()) return;
     sendJson({ type: "response.create" });
+    markAwaitingAgentResponse();
+  }
+
+  /** Inject context then speak — cancels any in-flight VAD reply so context lands first. */
+  function sendContextAndRespond(text, { bypassGrace = false } = {}) {
+    if (!isTransportOpen() || !sessionReady) return;
+    sendContextSilent(text);
+    if (!bypassGrace && isStartupGrace()) return;
+    sendJson({ type: "response.cancel" });
+    sendJson({ type: "response.create" });
+    markAwaitingAgentResponse();
+  }
+
+  function cancelPendingResponse() {
+    if (!isTransportOpen()) return;
+    sendJson({ type: "response.cancel" });
+    clearAwaitingAgentResponse();
   }
 
   // ---------------------------------------------------------------------------
@@ -1479,42 +1757,11 @@
     });
   }
 
-  /** When voice is live, Yuki speaks a brief reaction — bet outcomes always get priority. */
-  function reactToGameEvent(type, payload = {}) {
-    if (!isTransportOpen() || !sessionReady) return false;
-    if (muted) return false;
-    if (type === "IDLE" && isStartupGrace()) return false;
+  /** When voice is live, Yuki speaks a brief bet outcome reaction. */
+  function deliverOutcomeReaction(type, payload = {}) {
+    if (!isTransportOpen() || !sessionReady || muted) return false;
 
-    if (type === "IDLE") return promptIdleConversation();
-
-    const inConvo = isInConversation();
-    const huge = isHugeEvent(type);
-    const isOutcome = OUTCOME_EVENTS.has(type);
     const priorityOutcome = isPriorityOutcome(type);
-    const isAmbient = AMBIENT_EVENTS.has(type);
-
-    notifyGameEvent(type, payload, {
-      inConversation: inConvo && !priorityOutcome,
-      huge: huge || priorityOutcome,
-    });
-
-    if (isAmbient && inConvo) return false;
-    if (inConvo && isOutcome && !huge && !priorityOutcome) return false;
-    if (isDeepConversation() && inConvo && !huge && !priorityOutcome) return false;
-
-    const now = Date.now();
-    if (isOutcome && now - lastOutcomeVoiceAt < outcomeVoiceCooldownMs()) return false;
-
-    if ((agentSpeaking || userSpeaking) && !huge && !priorityOutcome) return false;
-
-    if ((agentSpeaking || userSpeaking) && (huge || priorityOutcome)) {
-      if (agentSpeaking) {
-        interruptPlayback();
-        if (isTransportOpen()) sendJson({ type: "response.cancel" });
-      }
-    }
-    userSpeaking = false;
-
     const winTone = " Stay bright and encouraging — one short line.";
     const lossTone = " Be empathetic and respectful — acknowledge the loss briefly, no laughing, no mockery, no sarcasm. Offer a next step (another pick, stake, or tab). One short line.";
 
@@ -1525,8 +1772,52 @@
     const text = prompts[type];
     if (!text) return false;
 
-    lastOutcomeVoiceAt = now;
+    lastOutcomeVoiceAt = Date.now();
     return injectUserPrompt(text, { priority: priorityOutcome });
+  }
+
+  /** When voice is live, Yuki speaks a brief reaction — queues win/loss if busy. */
+  function reactToGameEvent(type, payload = {}) {
+    if (!isTransportOpen() || !sessionReady) return false;
+    if (muted) return false;
+    if (type === "IDLE" && isStartupGrace()) return false;
+
+    if (type === "IDLE") return promptIdleConversation();
+
+    const inConvo = isInConversation();
+    const activeExchange = isActiveVoiceExchange();
+    const huge = isHugeEvent(type);
+    const isOutcome = OUTCOME_EVENTS.has(type);
+    const priorityOutcome = isPriorityOutcome(type);
+    const isAmbient = AMBIENT_EVENTS.has(type);
+
+    notifyGameEvent(type, payload, {
+      inConversation: inConvo && !priorityOutcome,
+      huge: huge || priorityOutcome,
+    });
+
+    if (isAmbient && activeExchange) return false;
+    if (isAmbient && inConvo) return false;
+    if (inConvo && isOutcome && !huge && !priorityOutcome) return false;
+    if (isDeepConversation() && inConvo && !huge && !priorityOutcome) return false;
+
+    if (priorityOutcome) {
+      if (userSpeaking || isAgentAudioPending() || activeExchange) {
+        schedulePendingOutcome(type, payload);
+        return false;
+      }
+      const now = Date.now();
+      if (now - lastOutcomeVoiceAt < outcomeVoiceCooldownMs()) {
+        schedulePendingOutcome(type, payload);
+        return false;
+      }
+      return deliverOutcomeReaction(type, payload);
+    }
+
+    if (activeExchange && !huge) return false;
+    if ((agentSpeaking || userSpeaking) && !huge) return false;
+
+    return deliverOutcomeReaction(type, payload);
   }
 
   function setMuted(value) {
@@ -1643,6 +1934,8 @@
     notifyDelegateConsent,
     sendContext,
     sendContextSilent,
+    sendContextAndRespond,
+    cancelPendingResponse,
     syncUserNameToVoice,
     isInConversation,
     isStartupGrace,

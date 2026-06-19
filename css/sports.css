@@ -744,6 +744,21 @@
 .yuki-suggest-banner .suggest-stake strong {
   color: var(--green);
 }
+.yuki-suggest-banner .suggest-hint {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 4px;
+}
+.yuki-suggest-banner .suggest-confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.match-card.has-yuki-preview {
+  outline: 1px solid rgba(147, 112, 219, 0.45);
+  box-shadow: 0 0 0 1px rgba(147, 112, 219, 0.2);
+}
 .yuki-suggest-banner .suggest-stake.missing {
   color: var(--gold);
   font-weight: 600;

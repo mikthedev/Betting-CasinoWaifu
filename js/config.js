@@ -32,7 +32,15 @@ window.YUKI_CONFIG = {
     conversationGraceMs: 18000,
     deepConversationGraceMs: 28000,
     agentSpeechGraceMs: 9000,
+    postSpeechListenMs: 6500,
+    postSpeechListenMsPerWord: 50,
+    postSpeechListenMsMax: 24000,
     outcomeVoiceCooldownMs: 4000,
+    outcomeVoiceDeferMs: 1000,
+    outcomeVoicePendingMaxMs: 12000,
+    outcomeUserSpeechOverlapMs: 3500,
+    outcomeAgentSpeechOverlapMs: 2500,
+    agentResponseWaitMs: 50000,
   },
 
   // ---------------------------------------------------------------------------

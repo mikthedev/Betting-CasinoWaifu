@@ -679,7 +679,12 @@
         }
 
         if (window.Sports.isSwitchPlayerIntent?.(t)) {
-          window.Sports.handleSwitchPlayerIntent();
+          window.Sports.handleSwitchPlayerIntent(t);
+          return;
+        }
+
+        if (window.Sports.isShowPlayerIntent?.(t)) {
+          window.Sports.handleShowPlayerIntent(t);
           return;
         }
 
@@ -697,12 +702,12 @@
           return;
         }
 
-        if (window.Sports.isConfirmIntent?.(t)) {
+        if (window.Sports.isSlipConfirmPhrase?.(t) || window.Sports.isConfirmIntent?.(t)) {
           window.Sports.handleConfirmIntent(t);
           return;
         }
 
-        if (window.VoiceBetting?.detectPlaceBetCommand?.(t)) {
+        if (window.VoiceBetting?.detectConsentTrigger?.(t) || window.VoiceBetting?.detectPlaceBetCommand?.(t)) {
           const handled = window.VoiceBetting.handleUserSpeech(t);
           if (handled.needsConsent) {
             window.VoiceBetting.requestDelegateConsent();
@@ -718,7 +723,7 @@
             return;
           }
         }
-        const isBestQuery  = /\b(best|recommend|top|who|suggest|favor|favourite|favorite|advise|should|performing|winning|good|strong)\b/.test(t);
+        const isBestQuery  = /\b(best|recommend|top|who|suggest|favor|favourite|favorite|advise|should|performing|winning|good|strong|character)\b/.test(t);
         const wantsRecommendation = isBestQuery
           || /\b(recommend|suggestion|who should|best pick|top pick|your pick)\b/.test(t);
         if (wantsRecommendation && !window.Sports.hasUserPlayerLock?.()) {

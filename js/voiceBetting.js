@@ -10,32 +10,110 @@
 
   const DELEGATE_CONSENT_HINT =
     "Player consented to voice-delegated bet placement until page refresh. " +
-    "Distinguish QUESTIONS from COMMANDS. Questions (\"can you place the bet?\") — answer only, do NOT submit. " +
-    "Clear commands (\"place the bet for me\", \"submit it\") — tap PLACE BET on screen via voice action. " +
-    "If UNSURE — ask one short confirmation (\"Want me to place it now?\"). " +
-    "Slip must have player + stake before placing. Chip/stake select by voice is OK without extra consent.";
+    "Only place bets when they give clear commands (\"place the bet for me\", \"submit it\", \"go ahead\"). " +
+    "Questions about betting, odds, or rules — answer only, never submit. " +
+    "Never mention consent unless they asked you to place bets for them.";
 
   function isQuestion(text) {
     const t = (text || "").trim();
     return t.endsWith("?") || /\b(can you|could you|should i|what if|how do|would you|will you)\b/i.test(t);
   }
 
-  function detectConsentTrigger(text) {
-    if (!text || isQuestion(text)) return false;
-    const t = text.toLowerCase();
+  function isEducationalOrRulesQuestion(text) {
+    const t = (text || "").toLowerCase().trim();
+    if (!t) return false;
+    if (
+      /\b(explain|tell me about|walk me through|teach me|help me understand|describe|break down)\b/.test(t) &&
+      /\b(bet|betting|odds|slip|stake|tennis|parlay|handicap|market|works?)\b/.test(t)
+    ) {
+      return true;
+    }
+    return (
+      /\b(how does|how do|how is|how are|how would|how should|how to)\b[\s\S]{0,70}\b(work|works|bet|betting|slip|odds|stake|tennis)\b/.test(t) ||
+      /\b(what is|what are|what'?s)\b[\s\S]{0,50}\b(bet slip|odds|parlay|handicap|market|staking)\b/.test(t) ||
+      /\b(what are the rules|how to bet|how do i bet|never played|first time|new to|don'?t know how)\b/.test(t) ||
+      /\b(can you|could you|will you)\s+(explain|tell me|describe|walk me through|teach)\b/.test(t)
+    );
+  }
 
-    if (/\b(place (the |my |a )?bet for me|bet for me|place bets for me|you place (the |my )?bet|you bet for me|submit (the |my )?bet for me|place it for me|wager for me)\b/.test(t)) {
+  function isAdviceQuestion(text) {
+    const t = (text || "").toLowerCase().trim();
+    if (!isQuestion(text)) return false;
+    return (
+      /\b(should i|what should|which player|who should|best bet|good bet|worth it|recommend|suggest|pick for me|your pick|your opinion|what do you think)\b/.test(t) ||
+      /\b(underdog|favorite|favourite|safer|riskier)\b/.test(t)
+    );
+  }
+
+  function isReflectiveSpeech(text) {
+    const t = (text || "").toLowerCase();
+    return /\b(thinking|not sure|hmm+|debating|torn|between|leaning|maybe|wondering|what about|or should)\b/.test(t);
+  }
+
+  function isDelegationQuestion(text) {
+    const t = (text || "").toLowerCase().trim();
+    if (isEducationalOrRulesQuestion(text)) return false;
+    return (
+      /\b(can you|could you|will you|would you|are you able|want you to|need you to)\b[\s\S]{0,50}\b(place|submit|bet|wager)\b/.test(t) ||
+      /\b(place|submit|bet|wager)[\s\S]{0,40}\b(for me|on my behalf|my behalf)\b/.test(t)
+    );
+  }
+
+  function detectImplicitActionRequest(text) {
+    const t = (text || "").toLowerCase().trim();
+    if (isAdviceQuestion(text) || isReflectiveSpeech(text) || isEducationalOrRulesQuestion(text)) return false;
+
+    const patterns = [
+      /\b(place|put|submit|lock in|go with)\s+(?:my\s+|the\s+|a\s+)?\b(bet|slip|wager)\b/,
+      /\b(bet|wager)\s+(?:for me|on my behalf)\b/,
+      /\b(you|yuki)\s+(?:place|submit|bet|wager)\b/,
+      /\b(go ahead|do it|just do|right now|make it happen)\b.*\b(bet|slip|wager|place)\b/,
+    ];
+    return patterns.some((re) => re.test(t));
+  }
+
+  function isClearCommand(text) {
+    const t = (text || "").toLowerCase().trim();
+    if (isQuestion(text) && !/\b(yes|go ahead|do it|place it|submit)\b/.test(t)) return false;
+    if (/\b(for me|go ahead|do it|just do|right now|on my behalf|want you to|need you to)\b/.test(t)) {
+      return /\b(bet|slip|wager|place|submit)\b/.test(t);
+    }
+    if (/\b(place|submit|lock in|finali[sz]e)\b/.test(t) && /\b(bet|slip|wager)\b/.test(t)) return true;
+    return detectPlaceBetCommand(text);
+  }
+
+  function isSlipFillOrConfirmRequest(text) {
+    if (!text) return false;
+    if (window.Sports?.isSlipConfirmPhrase?.(text)) return true;
+    if (window.Sports?.isFillSlipIntent?.(text)) return true;
+    if (window.Sports?.isConfirmIntent?.(text)) return true;
+    const t = text.toLowerCase();
+    return /\b(fill|confirm).*(slip|form)\b/.test(t)
+      || /\b(fill it|confirm it|confirm and fill)\b/.test(t);
+  }
+
+  function detectConsentTrigger(text) {
+    if (!text) return false;
+    if (isSlipFillOrConfirmRequest(text)) return false;
+    if (isAdviceQuestion(text) || isReflectiveSpeech(text) || isEducationalOrRulesQuestion(text)) {
+      return false;
+    }
+
+    if (isDelegationQuestion(text)) return true;
+
+    const t = text.toLowerCase();
+    const explicitDelegate =
+      /\b(bet for me|place (a |the |my )?bet( for me| on)?|you bet|you place|submit (the |my )?bet for me|place bets for me|you handle|you do it|want you to (place|submit|bet)|go ahead and (place|submit|bet)|please (place|submit) (the |my )?bet|i want you to (place|submit|bet)|have you (place|submit|bet)|let you (place|submit|bet|handle)|need you to (place|submit|bet)|on my behalf|take over|do the bet for me|wager for me)\b/.test(
+        t
+      );
+    if (explicitDelegate) return true;
+
+    if (detectImplicitActionRequest(text)) return true;
+
+    if (isClearCommand(text) && /\b(for me|on my behalf|you place|you bet|want you to)\b/.test(t)) {
       return true;
     }
-    if (/\b(want you to place|need you to place|have you place|let you place|on my behalf|you handle (the |my )?bet|take over (and )?bet|do the bet for me)\b/.test(t)) {
-      return true;
-    }
-    if (/\b(go ahead and (place|submit)|please place (the |my )?bet|i want you to (place|submit))\b/.test(t)) {
-      return true;
-    }
-    if (/\b(can you place|could you place|will you place)\b/.test(t) && /\b(bet|slip|wager)\b/.test(t)) {
-      return true;
-    }
+
     return false;
   }
 
@@ -77,7 +155,7 @@
       return {
         executed: false,
         needsConsent: true,
-        hint: "Player wants voice-delegated bet placement. Tell them to review the on-screen consent prompt and tap Consent or Deny.",
+        hint: "Player explicitly asked you to place bets for them. Tell them briefly to tap Consent on the on-screen prompt — nothing else.",
       };
     }
 
