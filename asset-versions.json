@@ -2,9 +2,9 @@
   "release": "1.1.0",
   "date": "2026-07-22",
   "commitLabel": "minimize-pill-drag + phone bracket + companion framing",
-  "note": "Per-file ?v= cache busting (same pattern as Interactive CasinoWaifu companion.html / lab.html). Bump a file's number when that asset changes.",
+  "note": "Per-file ?v= cache busting + visible header badge via js/app-version.js (same idea as Interactive CasinoWaifu casino-version.js).",
   "assets": {
-    "css/game.css": 2,
+    "css/game.css": 3,
     "css/widget.css": 51,
     "css/sports.css": 12,
     "css/voiceBetting.css": 2,
@@ -12,6 +12,7 @@
     "css/yuki-companion-bridge.css": 8,
     "css/desktop.css": 6,
     "js/runtime.js": 2,
+    "js/app-version.js": 1,
     "js/config.js": 2,
     "js/eventBus.js": 2,
     "js/memory.js": 2,
@@ -27,6 +28,8 @@
     "js/yuki-avatar-3d.js": 4
   },
   "thisCommit": {
+    "js/app-version.js": "1 — visible v1.1.0 badge in app bar",
+    "css/game.css": "3 — app-version-badge styles",
     "css/widget.css": "51 — restore-pill grab cursor + drag affordance",
     "js/widget.js": "51 — minimized Show pill stays put and is draggable (phone + desktop)",
     "js/yuki-avatar-3d.js": "4 — close bust camera (reverted over-zoom)"
