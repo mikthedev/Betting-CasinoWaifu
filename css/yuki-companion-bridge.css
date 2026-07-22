@@ -1,0 +1,213 @@
+/* Bridge: apply CasinoWaifu companion tokens to betting app */
+body.betting-mode {
+  --companion-w: clamp(148px, 14vw, 216px);
+  --companion-ratio: 1 / 1.22;
+  --companion-radius: 22px;
+  --companion-glass: rgba(18, 20, 32, 0.38);
+  --companion-glass-edge: rgba(255, 255, 255, 0.14);
+  --companion-border: rgba(255, 255, 255, 0.12);
+  --companion-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.42),
+    0 6px 18px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --companion-glow: rgba(122, 114, 168, 0.35);
+  --companion-accent: #8f87bc;
+  --companion-cyan: rgba(110, 231, 255, 0.55);
+}
+
+@media (max-width: 480px) {
+  body.betting-mode {
+    --companion-w: 112px;
+    --companion-ratio: 3 / 4;
+    --companion-radius: 16px;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 1099px) {
+  body.betting-mode {
+    --companion-w: 124px;
+    --companion-ratio: 3 / 4;
+    --companion-radius: 18px;
+  }
+}
+
+@media (min-width: 1100px) {
+  body.betting-mode {
+    /* Compact desktop size; tall ratio + camera framing keep her uncropped */
+    --companion-w: clamp(156px, 10vw, 188px);
+    --companion-ratio: 3 / 4;
+    --companion-radius: 22px;
+  }
+}
+
+/* Map betting floating host to companion sizing */
+body.betting-mode.yuki-overlay-mode .yuki-widget-host {
+  width: var(--companion-w);
+  max-width: min(var(--companion-w), calc(100vw - 24px));
+  bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 84px));
+  right: 14px;
+}
+
+body.betting-mode.desktop-layout.yuki-overlay-mode .yuki-widget-host,
+body.betting-mode.desktop-layout .yuki-widget-host {
+  display: block !important;
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  bottom: 28px;
+  right: 28px;
+  width: var(--companion-w);
+}
+
+body.betting-mode .yuki-widget-host #yuki-widget,
+body.betting-mode .yuki-widget-host .yuki-bar {
+  width: 100%;
+  min-height: auto !important;
+  padding: 0;
+  overflow: visible;
+}
+
+body.betting-mode .yuki-root.casino-widget {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+/* Apply companion panel rules under betting-mode (mirror casino-mode) */
+body.betting-mode .yuki-companion-panel .yuki-char-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  animation: companionIdleFloat 6s ease-in-out infinite;
+  transform-origin: 50% 88%;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+body.betting-mode .yuki-companion-panel .yuki-char-wrap,
+body.betting-mode .yuki-companion-panel .yuki-char {
+  border-radius: 0;
+}
+
+body.betting-mode .yuki-root.listening .yuki-companion-glow { opacity: 1; animation: companionListenPulse 2.4s ease-in-out infinite; }
+body.betting-mode .yuki-root.speaking .yuki-companion-glow {
+  opacity: 1;
+  background: radial-gradient(ellipse 90% 80% at 50% 85%, var(--companion-cyan), transparent 72%);
+  animation: companionSpeakGlow 1.6s ease-in-out infinite;
+}
+body.betting-mode .yuki-root.speaking .yuki-companion-frame {
+  border-color: rgba(110, 231, 255, 0.35);
+  box-shadow: var(--companion-shadow), 0 0 0 1px rgba(110, 231, 255, 0.2), 0 0 32px rgba(110, 231, 255, 0.14);
+}
+body.betting-mode .yuki-root.listening .yuki-companion-frame {
+  border-color: rgba(143, 135, 188, 0.32);
+}
+
+body.betting-mode .yuki-companion-panel .listen-ring {
+  bottom: 10%;
+  width: 62%;
+  border-color: rgba(110, 231, 255, 0.42);
+  border-width: 1.5px;
+}
+
+body.betting-mode .yuki-char-stage-3d {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+body.betting-mode .yuki-char-3d {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  animation: none !important;
+  filter: none;
+  background: transparent !important;
+}
+
+body.betting-mode .yuki-root.yuki-hidden .yuki-companion-panel {
+  opacity: 0;
+  transform: translateY(18px) scale(0.94);
+  pointer-events: none;
+}
+
+body.betting-mode .yuki-companion-panel {
+  touch-action: none;
+  cursor: grab;
+  margin-bottom: 40px;
+}
+body.betting-mode .yuki-widget-host.is-dragging .yuki-companion-panel {
+  cursor: grabbing;
+}
+
+/* Phone / tablet: compact floating Yuki, controls below frame (not on her face) */
+@media (max-width: 1099px) {
+  body.betting-mode.yuki-overlay-mode .yuki-widget-host {
+    width: var(--companion-w);
+    max-width: min(var(--companion-w), calc(100vw - 20px));
+    bottom: max(108px, calc(env(safe-area-inset-bottom, 0px) + 96px));
+    right: 10px;
+  }
+
+  body.betting-mode .yuki-companion-panel {
+    margin-top: 0;
+    margin-bottom: 34px;
+    width: var(--companion-w);
+  }
+
+  body.betting-mode .yuki-companion-viewport {
+    inset: 0 !important;
+  }
+
+  body.betting-mode .yuki-companion-toolbar {
+    top: auto !important;
+    bottom: -32px !important;
+    left: 50%;
+    right: auto;
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%);
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: rgba(10, 14, 22, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  }
+
+  body.betting-mode .yuki-companion-btn {
+    width: 28px;
+    height: 28px;
+  }
+  body.betting-mode .yuki-companion-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+
+/* Minimized restore pill — match reference; never hide #yuki-widget */
+body.betting-mode .yuki-widget-host.yuki-mini {
+  width: auto !important;
+  height: auto !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+body.betting-mode .yuki-widget-host.yuki-mini::after { display: none !important; }
+body.betting-mode .yuki-widget-host.yuki-mini #yuki-widget {
+  display: block !important;
+}
+body.betting-mode .yuki-widget-host.yuki-mini .yuki-restore-pill {
+  display: inline-flex !important;
+  pointer-events: auto;
+  opacity: 1;
+  transform: none;
+  margin: 0;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}

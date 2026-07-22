@@ -1,0 +1,372 @@
+/* ============================================================================
+   desktop.css — clean full desktop sportsbook (≥1100px)
+   ============================================================================ */
+
+.app-subtitle,
+.wc-hero-stats,
+.matches-section-label { display: none; }
+
+.desktop-aside { display: none; }
+
+.workspace-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (min-width: 1100px) {
+  body.betting-mode {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+    overflow: hidden;
+    background: #0a121a;
+  }
+
+  .app-shell {
+    width: 100%;
+    height: 100vh;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    display: block;
+  }
+
+  .workspace.phone,
+  .phone {
+    width: 100%;
+    max-width: none;
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    background: #0a121a;
+    overflow: hidden;
+  }
+
+  .phone::before { display: none; }
+
+  .app-bar {
+    height: 56px;
+    padding: 0 24px;
+    background: #0f1a24;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .app-logo {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .app-title {
+    font-size: 16px;
+    font-weight: 750;
+  }
+
+  .workspace-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 0;
+    height: calc(100vh - 56px);
+  }
+
+  .workspace-main,
+  .betting-screen {
+    min-width: 0;
+    height: 100%;
+  }
+
+  .desktop-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 16px;
+    border-left: 1px solid var(--border);
+    background: #0c151e;
+    overflow: auto;
+  }
+
+  body.desktop-layout .yuki-slot--bar { display: none; }
+
+  /* Main column — calm and open */
+  .sports-scroll-area {
+    padding: 0 24px 24px;
+  }
+
+  .wc-hero {
+    margin: 18px 0 14px;
+    padding: 0;
+    border: none;
+    background: none;
+  }
+
+  .wc-hero-eyebrow {
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .wc-hero-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  .sports-toolbar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, #0e1720 0%, #0c151e 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+  }
+
+  .sports-toolbar::after {
+    display: none;
+  }
+
+  .sports-tournament-tabs {
+    position: static;
+    background: transparent;
+    border: none;
+    padding: 0;
+    gap: 6px;
+  }
+
+  .tour-tab {
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+  }
+
+  .tour-tab.active {
+    background: rgba(29, 185, 106, 0.14);
+    border-color: rgba(29, 185, 106, 0.35);
+    color: var(--green);
+  }
+
+  .sports-bet-type-tabs {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 0;
+    gap: 4px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 3px;
+  }
+
+  .bet-type-tab {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border-bottom: none;
+    font-size: 11px;
+  }
+
+  .bet-type-tab.active {
+    background: var(--bg-3);
+    color: var(--ink);
+    border-bottom-color: transparent;
+  }
+
+  .bracket-board {
+    padding: 0 0 16px;
+    margin-bottom: 8px;
+    overflow: visible;
+  }
+
+  .bracket-tree {
+    min-width: 0;
+    padding: 18px 16px 20px;
+    gap: 12px;
+  }
+
+  .bt-rounds {
+    grid-template-columns: auto 16px auto 14px auto;
+  }
+  .bt-rounds--mirror {
+    grid-template-columns: auto 14px auto 16px auto;
+  }
+
+  .bt-round { min-height: 320px; }
+  .bt-flag { width: 40px; height: 40px; }
+  .bt-flag-emoji { font-size: 18px; }
+  .bt-flag--sm { width: 30px; height: 30px; }
+  .bt-flag--md { width: 36px; height: 36px; }
+  .bt-flag--lg { width: 58px; height: 58px; }
+  .bt-team-name { font-size: 9px; max-width: 60px; }
+  .bt-final { min-width: 140px; padding: 16px; }
+  .bt-final-title { font-size: 24px; }
+  .bt-final-note { max-width: 140px; font-size: 10px; }
+
+  .sports-matches {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 0;
+  }
+
+  .match-card {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #121c27;
+  }
+
+  .match-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .player-name { font-size: 13px; }
+  .player-odds-val { font-size: 17px; }
+  .star-chip-name { font-size: 12px; }
+
+  /* Aside: confirm slip first, Yuki docked below (fills unused space) */
+  .desktop-slip-dock {
+    flex: 0 0 auto;
+  }
+
+  .desktop-yuki-dock {
+    flex: 1 1 auto;
+    min-height: 220px;
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  body.desktop-layout .yuki-widget-host.yuki-docked {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    height: 100%;
+    max-width: none;
+    z-index: 2;
+    pointer-events: none;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    overflow: visible;
+  }
+
+  body.desktop-layout .yuki-widget-host.yuki-docked #yuki-widget,
+  body.desktop-layout .yuki-widget-host.yuki-docked .yuki-bar,
+  body.desktop-layout .yuki-widget-host.yuki-docked .yuki-root,
+  body.desktop-layout .yuki-widget-host.yuki-docked .yuki-stage {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+body.desktop-layout .yuki-widget-host.yuki-docked .yuki-companion-panel {
+    width: var(--companion-w);
+    max-width: 100%;
+    margin-top: 0;
+    pointer-events: auto;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  body.desktop-layout .yuki-widget-host.yuki-docked .yuki-companion-frame {
+    /* Same frame as floating — do not retarget aspect/height on undock */
+    max-height: none;
+  }
+
+  body.desktop-layout .yuki-widget-host.yuki-docked.yuki-mini {
+    justify-content: flex-end;
+    align-items: center;
+    height: auto;
+    min-height: 0;
+  }
+
+  body.desktop-layout .yuki-widget-host.yuki-docked .yuki-restore-pill {
+    pointer-events: auto;
+    margin-bottom: 8px;
+  }
+
+  .bet-slip.desktop-slip {
+    position: static;
+    max-height: none !important;
+    opacity: 1 !important;
+    border-radius: 14px;
+    border: 1px solid var(--border-strong);
+    background: #121c27;
+    overflow: hidden;
+  }
+
+  .bet-slip.desktop-slip .bet-slip-inner {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .bet-slip.desktop-slip #bet-slip-selection:empty::before {
+    content: "Pick a team to see your bet here";
+    display: block;
+    padding: 18px 8px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+
+  .bet-slip.desktop-slip .sports-place-btn {
+    padding: 13px;
+    font-size: 14px;
+    border-radius: 10px;
+  }
+
+  body.desktop-layout .yuki-confirm-slot .yuki-suggest-banner {
+    border-radius: 12px 12px 0 0;
+  }
+}
+
+@media (min-width: 1400px) {
+  .workspace-body {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  .sports-scroll-area { padding: 0 32px 32px; }
+  .wc-hero-title { font-size: 32px; }
+}
+
+@media (min-width: 900px) and (max-width: 1099px) {
+  body.betting-mode {
+    padding: 20px;
+    background: var(--bg-0);
+  }
+
+  .workspace.phone,
+  .phone {
+    width: var(--phone-w);
+    height: var(--phone-h);
+    border-radius: 36px;
+    border: 1px solid var(--border-strong);
+    box-shadow:
+      0 0 0 8px #0a1520,
+      0 30px 80px rgba(0, 0, 0, 0.55);
+  }
+
+  .desktop-aside { display: none !important; }
+}
+
+@media (max-width: 1099px) {
+  .desktop-aside { display: none !important; }
+}

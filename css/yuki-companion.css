@@ -1,0 +1,585 @@
+/* ============================================================================
+   casino-companion.css — Premium 3D Yuki companion panel (casino overlay)
+   Glass morphism · portrait window · aurora backdrop · minimal chrome
+   ========================================================================== */
+
+.casino-mode {
+  --companion-w: clamp(148px, 14vw, 216px);
+  --companion-ratio: 1 / 1.22;
+  --companion-radius: 22px;
+  --companion-glass: rgba(18, 20, 32, 0.38);
+  --companion-glass-edge: rgba(255, 255, 255, 0.14);
+  --companion-border: rgba(255, 255, 255, 0.12);
+  --companion-shadow:
+    0 20px 50px rgba(0, 0, 0, 0.42),
+    0 6px 18px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --companion-glow: rgba(122, 114, 168, 0.35);
+  --companion-accent: var(--accent-bright, #8f87bc);
+  --companion-cyan: rgba(110, 231, 255, 0.55);
+}
+
+@media (max-width: 480px) {
+  .casino-mode {
+    --companion-w: 112px;
+    --companion-ratio: 3 / 4;
+    --companion-radius: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .casino-mode {
+    --companion-w: clamp(156px, 10vw, 188px);
+    --companion-ratio: 3 / 4;
+    --companion-radius: 22px;
+  }
+}
+
+/* ── Host sizing ─────────────────────────────────────────────────────────── */
+.casino-mode .yuki-widget-host {
+  width: var(--companion-w);
+  max-width: min(var(--companion-w), calc(100vw - 24px));
+}
+
+.casino-mode .yuki-widget-host #yuki-widget,
+.casino-mode .yuki-widget-host .yuki-bar {
+  width: 100%;
+  min-height: auto;
+  padding: 0;
+  overflow: visible;
+}
+
+.casino-mode .yuki-root.casino-widget {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+/* ── Companion panel ─────────────────────────────────────────────────────── */
+.yuki-companion-panel {
+  position: relative;
+  width: var(--companion-w);
+  aspect-ratio: var(--companion-ratio);
+  height: auto;
+  margin-top: 8px;
+  margin-bottom: 40px;
+  pointer-events: auto;
+  border-radius: var(--companion-radius);
+  overflow: visible;
+  transition:
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.34s ease,
+    filter 0.34s ease;
+  will-change: transform;
+}
+
+.yuki-companion-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, 0.07) 0%, transparent 42%),
+    var(--companion-glass);
+  backdrop-filter: blur(22px) saturate(1.45);
+  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  border: 1px solid var(--companion-border);
+  box-shadow: var(--companion-shadow);
+  transition:
+    box-shadow 0.42s ease,
+    border-color 0.34s ease;
+}
+
+.yuki-companion-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 6;
+  box-shadow: inset 0 0 0 1px var(--companion-glass-edge);
+  mask: linear-gradient(#fff, #fff);
+}
+
+.yuki-companion-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 5;
+  background: radial-gradient(ellipse 90% 55% at 50% 0%, rgba(255, 255, 255, 0.09), transparent 58%);
+}
+
+/* Aurora backdrop — visible through transparent 3D canvas */
+.yuki-companion-aurora {
+  position: absolute;
+  inset: -15% -20%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 45% at 30% 78%, rgba(122, 114, 168, 0.28), transparent 68%),
+    radial-gradient(ellipse 50% 40% at 72% 22%, rgba(110, 231, 255, 0.16), transparent 65%),
+    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(143, 135, 188, 0.14), transparent 70%);
+  animation: companionAurora 14s ease-in-out infinite alternate;
+}
+
+@keyframes companionAurora {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.85; }
+  100% { transform: translate(-2%, -1.5%) scale(1.04); opacity: 1; }
+}
+
+.yuki-companion-glow {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0;
+  background: radial-gradient(
+    ellipse 85% 75% at 50% 88%,
+    var(--companion-glow),
+    transparent 70%
+  );
+  filter: blur(8px);
+  transition: opacity 0.45s ease;
+}
+
+/* Avatar viewport — full frame for Yuki; controls float outside the border */
+.yuki-companion-viewport {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.casino-mode .yuki-companion-panel .yuki-char-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  animation: companionIdleFloat 6s ease-in-out infinite;
+  transform-origin: 50% 88%;
+}
+
+.casino-mode .yuki-companion-panel .yuki-char-wrap,
+.casino-mode .yuki-companion-panel .yuki-char {
+  border-radius: 0;
+}
+
+@keyframes companionIdleFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes companionListenPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.85; }
+}
+
+@keyframes companionSpeakGlow {
+  0%, 100% { opacity: 0.5; filter: blur(8px); }
+  50% { opacity: 1; filter: blur(12px); }
+}
+
+/* ── Hover elevation ─────────────────────────────────────────────────────── */
+@media (hover: hover) and (min-width: 481px) {
+  .yuki-companion-panel:not(.is-dragging):hover {
+    transform: translateY(-4px);
+  }
+
+  .yuki-companion-panel:not(.is-dragging):hover .yuki-companion-frame {
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 26px 60px rgba(0, 0, 0, 0.46),
+      0 8px 22px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* ── Drag — keep size identical; no scale pop ─────────────────────────────── */
+.yuki-widget-host.is-dragging .yuki-companion-panel {
+  transform: none;
+  transition: none;
+}
+
+.yuki-widget-host.is-dragging .yuki-companion-panel .yuki-char-wrap {
+  animation: none;
+}
+
+/* ── Voice states ────────────────────────────────────────────────────────── */
+.casino-mode .yuki-root.listening .yuki-companion-glow {
+  opacity: 1;
+  animation: companionListenPulse 2.4s ease-in-out infinite;
+}
+
+.casino-mode .yuki-root.speaking .yuki-companion-glow {
+  opacity: 1;
+  background: radial-gradient(
+    ellipse 90% 80% at 50% 85%,
+    var(--companion-cyan),
+    transparent 72%
+  );
+  animation: companionSpeakGlow 1.6s ease-in-out infinite;
+}
+
+.casino-mode .yuki-root.speaking .yuki-companion-frame {
+  border-color: rgba(110, 231, 255, 0.35);
+  box-shadow:
+    var(--companion-shadow),
+    0 0 0 1px rgba(110, 231, 255, 0.2),
+    0 0 32px rgba(110, 231, 255, 0.14);
+}
+
+.casino-mode .yuki-root.listening .yuki-companion-frame {
+  border-color: rgba(143, 135, 188, 0.32);
+}
+
+.casino-mode.yuki-avatar-3d-ready .yuki-root.speaking .yuki-char,
+.casino-mode.yuki-avatar-3d-ready .yuki-root[data-emotion="excited"] .yuki-char-wrap {
+  animation: none !important;
+}
+
+/* Toolbar — desktop: inside panel footer; phone: overridden to sit below frame */
+.yuki-companion-toolbar {
+  position: absolute;
+  top: auto;
+  bottom: -36px;
+  left: 50%;
+  right: auto;
+  z-index: 9;
+  display: flex;
+  gap: 6px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%);
+  padding: 4px 6px;
+  border-radius: 999px;
+  background: rgba(10, 14, 22, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.yuki-companion-panel:hover .yuki-companion-toolbar,
+.yuki-companion-panel:focus-within .yuki-companion-toolbar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 1099px) {
+  .yuki-companion-toolbar {
+    bottom: -32px;
+  }
+}
+
+.yuki-companion-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(14, 16, 26, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.yuki-companion-btn:hover {
+  background: rgba(28, 32, 48, 0.92);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.yuki-companion-btn:active {
+  transform: scale(0.88);
+}
+
+.yuki-companion-btn svg {
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+}
+
+/* Mute icon states — single SVG, CSS toggles wave vs slash */
+.yuki-companion-btn .icon-slash {
+  display: none;
+}
+
+.yuki-companion-btn.is-muted {
+  color: #ff9090;
+  border-color: rgba(255, 120, 120, 0.25);
+  background: rgba(40, 16, 20, 0.85);
+}
+
+.yuki-companion-btn.is-muted .icon-wave {
+  display: none;
+}
+
+.yuki-companion-btn.is-muted .icon-slash {
+  display: block;
+}
+
+/* ── Listen ring ─────────────────────────────────────────────────────────── */
+.casino-mode .yuki-companion-panel .listen-ring {
+  bottom: 10%;
+  width: 62%;
+  border-color: rgba(110, 231, 255, 0.42);
+  border-width: 1.5px;
+}
+
+/* ── 3D canvas ───────────────────────────────────────────────────────────── */
+.casino-mode .yuki-char-stage-3d {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.casino-mode .yuki-char-3d {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  animation: none !important;
+  filter: none;
+  background: transparent !important;
+}
+
+.casino-mode .yuki-char-wrap.yuki-avatar-3d-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.07) 48%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: companionShimmer 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.casino-mode .yuki-char-wrap.yuki-avatar-3d-loading::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: rgba(110, 231, 255, 0.55);
+  box-shadow: 0 0 16px rgba(110, 231, 255, 0.35);
+  z-index: 5;
+  animation: companionLoaderDot 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes companionShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes companionLoaderDot {
+  0%, 100% { transform: scale(0.85); opacity: 0.45; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+.casino-mode .yuki-avatar-3d-loader {
+  position: absolute;
+  left: 50%;
+  bottom: 16%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  z-index: 5;
+  pointer-events: none;
+  animation: companionLoaderPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes companionLoaderPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.85; }
+}
+
+.casino-mode .yuki-char-fallback[hidden] {
+  display: none !important;
+}
+
+.casino-mode.yuki-avatar-3d-ready .yuki-char-fallback,
+.casino-mode.yuki-avatar-3d-mode .yuki-char-fallback,
+body.yuki-avatar-3d-mode .yuki-char-fallback {
+  display: none !important;
+}
+
+/* ── Activation zone (bubble sits above the frame, left of toolbar) ───── */
+.yuki-activation-zone {
+  position: relative;
+  width: 100%;
+  margin-top: 32px;
+  padding-top: 54px;
+}
+
+.yuki-activation-zone > .yuki-speech-bubble {
+  top: -4px;
+  left: 6px;
+  right: auto;
+  bottom: auto;
+  transform: translateY(6px) scale(0.96);
+  margin: 0;
+  font-size: 12px;
+  padding: 9px 16px 9px 12px;
+  min-height: 38px;
+  max-width: calc(100% - 56px);
+  z-index: 11;
+}
+
+.yuki-activation-zone > .yuki-speech-bubble::after {
+  left: 22px;
+  transform: none;
+}
+
+.yuki-activation-zone > .yuki-speech-bubble.show {
+  transform: translateY(0) scale(1);
+  animation: casinoBubbleFloat 2.6s ease-in-out 0.3s infinite;
+}
+
+.yuki-activation-zone > .yuki-speech-bubble.show:active {
+  transform: scale(0.97);
+  animation: none;
+}
+
+@keyframes casinoBubbleFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.yuki-activation-zone .yuki-companion-panel {
+  margin-top: 0;
+}
+
+/* Hide chrome controls while the tap prompt is showing — avoids overlap */
+.yuki-awaiting-tap .yuki-companion-toolbar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ── Toast — floats outside the companion border (above the frame) ───────── */
+.casino-mode .yuki-widget-host .yuki-toast,
+body.yuki-overlay-mode .yuki-widget-host .yuki-toast,
+body.betting-mode .yuki-companion-panel > .yuki-toast {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  right: auto;
+  top: auto;
+  z-index: 12;
+  transform: translate(-50%, 6px);
+  margin: 0;
+  font-size: 11px;
+  padding: 8px 12px;
+  max-width: min(220px, calc(100vw - 32px));
+  width: max-content;
+  white-space: nowrap;
+  border-radius: 999px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.casino-mode .yuki-widget-host .yuki-toast.show,
+body.yuki-overlay-mode .yuki-widget-host .yuki-toast.show,
+body.betting-mode .yuki-companion-panel > .yuki-toast.show {
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 480px) {
+  .casino-mode .yuki-widget-host .yuki-toast,
+  body.betting-mode .yuki-companion-panel > .yuki-toast {
+    font-size: 10px;
+    padding: 7px 10px;
+    max-width: min(160px, calc(100vw - 24px));
+    bottom: calc(100% + 8px);
+  }
+}
+
+/* ── Hidden / restore ────────────────────────────────────────────────────── */
+.yuki-root.yuki-hidden .yuki-companion-panel {
+  opacity: 0;
+  transform: translateY(16px) scale(0.92);
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.yuki-root.yuki-pop .yuki-companion-panel {
+  animation: companionPopIn 0.55s cubic-bezier(0.2, 1.28, 0.34, 1) forwards;
+}
+
+@keyframes companionPopIn {
+  0% { opacity: 0; transform: translateY(18px) scale(0.88); }
+  55% { opacity: 1; transform: translateY(-5px) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.yuki-root.yuki-hidden .yuki-stage {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+}
+
+.casino-mode .yuki-widget-host.yuki-mini {
+  width: auto !important;
+}
+
+.casino-mode .yuki-widget-host.yuki-mini .yuki-restore-pill {
+  margin: 0;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: rgba(18, 20, 32, 0.65);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Drag cursor (always draggable — docked undocks on move) ─────────────── */
+@media (min-width: 1024px) {
+  .casino-mode .yuki-widget-host .yuki-companion-panel {
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .casino-mode .yuki-widget-host.is-dragging .yuki-companion-panel {
+    cursor: grabbing;
+  }
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .yuki-companion-panel,
+  .yuki-companion-frame,
+  .yuki-companion-glow,
+  .yuki-companion-aurora,
+  .yuki-companion-panel .yuki-char-wrap {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,5 +1,5 @@
 /**
- * voiceBetting.js — voice-delegated tennis bet placement (with consent modal)
+ * voiceBetting.js — voice-delegated World Cup bet placement (with consent modal)
  */
 (function () {
   const bus = window.EventBus;
@@ -24,12 +24,12 @@
     if (!t) return false;
     if (
       /\b(explain|tell me about|walk me through|teach me|help me understand|describe|break down)\b/.test(t) &&
-      /\b(bet|betting|odds|slip|stake|tennis|parlay|handicap|market|works?)\b/.test(t)
+      /\b(bet|betting|odds|slip|stake|football|soccer|world cup|parlay|handicap|market|works?)\b/.test(t)
     ) {
       return true;
     }
     return (
-      /\b(how does|how do|how is|how are|how would|how should|how to)\b[\s\S]{0,70}\b(work|works|bet|betting|slip|odds|stake|tennis)\b/.test(t) ||
+      /\b(how does|how do|how is|how are|how would|how should|how to)\b[\s\S]{0,70}\b(work|works|bet|betting|slip|odds|stake|football|soccer|world cup)\b/.test(t) ||
       /\b(what is|what are|what'?s)\b[\s\S]{0,50}\b(bet slip|odds|parlay|handicap|market|staking)\b/.test(t) ||
       /\b(what are the rules|how to bet|how do i bet|never played|first time|new to|don'?t know how)\b/.test(t) ||
       /\b(can you|could you|will you)\s+(explain|tell me|describe|walk me through|teach)\b/.test(t)
@@ -40,7 +40,7 @@
     const t = (text || "").toLowerCase().trim();
     if (!isQuestion(text)) return false;
     return (
-      /\b(should i|what should|which player|who should|best bet|good bet|worth it|recommend|suggest|pick for me|your pick|your opinion|what do you think)\b/.test(t) ||
+      /\b(should i|what should|which team|which player|who should|best bet|good bet|worth it|recommend|suggest|pick for me|your pick|your opinion|what do you think)\b/.test(t) ||
       /\b(underdog|favorite|favourite|safer|riskier)\b/.test(t)
     );
   }
@@ -136,7 +136,7 @@
       return {
         ok: false,
         reason: "slip-incomplete",
-        hint: "Bet slip is not ready — pick a player and stake (10, 25, 50, 100) before placing.",
+        hint: "Bet slip is not ready — pick a team and stake (10, 25, 50, 100) before placing.",
       };
     }
     const placed = window.Sports?.placeBet?.();
@@ -210,7 +210,7 @@
       <div class="yuki-consent-card">
         <h2 class="yuki-consent-title" id="yuki-consent-title">Voice-Delegated Betting</h2>
         <div class="yuki-consent-body">
-          <p>You asked Yuki to place tennis bets on your behalf via voice.</p>
+          <p>You asked Yuki to place World Cup bets on your behalf via voice.</p>
           <p>By continuing, you authorize Yuki to submit bets on the bet slip when you verbally request it. You remain responsible for your balance and betting decisions.</p>
           <p>This is a demo prototype with no real money. Betting CasinoWaifu accepts no liability for losses, timing errors, or unintended actions after consent. Authorization lasts until you refresh or close this page.</p>
         </div>

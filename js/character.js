@@ -1,5 +1,5 @@
 /**
- * character.js — Yuki reactions for tennis betting (uplifting casino-buddy energy)
+ * character.js — Yuki reactions for World Cup betting
  */
 (function () {
   const pick = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -16,9 +16,9 @@
   });
 
   const LINES = {
-    WIN:     ["Nice pick!", "Winner~ 🎾", "Let's go!", "You got it!"],
-    LOSE:    ["Tough break — want another pick?", "That one didn't land. Try someone else?", "Respectfully noted — next match?", "Close one. Another stake or player?"],
-    IDLE:    ["Hey~!", "What's up?", "Talk to me~", "Pick a player~", "Let's go~"],
+    WIN:     ["Nice pick!", "Winner~ ⚽", "Let's go!", "You got it!"],
+    LOSE:    ["Tough break — want another side?", "That one didn't land. Try another team?", "Respectfully noted — next match?", "Close one. Another stake or team?"],
+    IDLE:    ["Hey~!", "What's up?", "Talk to me~", "Pick a team~", "Let's go~"],
   };
 
   function reactToOutcome(type) {

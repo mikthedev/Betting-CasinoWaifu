@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#080a12" />
-    <title>Betting CasinoWaifu · Tennis · Yuki</title>
+    <title>Betting CasinoWaifu · World Cup 2026 · Yuki</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -12,77 +12,100 @@
     <link rel="stylesheet" href="css/widget.css" />
     <link rel="stylesheet" href="css/sports.css" />
     <link rel="stylesheet" href="css/voiceBetting.css" />
+    <link rel="stylesheet" href="css/yuki-companion.css" />
+    <link rel="stylesheet" href="css/yuki-companion-bridge.css" />
+    <link rel="stylesheet" href="css/desktop.css" />
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "/vendor/three/build/three.module.js",
+        "three/addons/": "/vendor/three/examples/jsm/"
+      }
+    }
+    </script>
   </head>
   <body class="betting-mode">
 
-    <div class="desktop-note">
-      <div class="phone-icon">🎾</div>
-      <h2>Betting CasinoWaifu</h2>
-      <p>Voice-guided tennis betting with Yuki — tap her to talk, ask for picks, and place bets by voice.</p>
-    </div>
-
-    <div class="device-frame">
-      <main class="phone">
+    <div class="app-shell">
+      <main class="workspace phone" id="workspace">
 
         <header class="app-bar">
           <div class="app-bar-left">
             <span class="app-logo">CW</span>
-            <span class="app-title">Tennis Bets</span>
+            <div class="app-bar-titles">
+              <span class="app-title">World Cup 2026</span>
+            </div>
           </div>
-          <div class="wallet-pill">
-            <span class="wallet-icon">$</span>
-            <span id="balance">1,000</span>
+          <div class="app-bar-right">
+            <div class="wallet-pill">
+              <span class="wallet-icon">$</span>
+              <span id="balance">1,000</span>
+            </div>
           </div>
         </header>
 
-        <section class="betting-screen active" aria-label="Tennis betting">
-          <div class="screen-inner sports-screen">
+        <div class="workspace-body">
+          <section class="betting-screen active workspace-main" aria-label="World Cup betting">
+            <div class="screen-inner sports-screen">
 
-            <div class="sports-scroll-area">
-              <div class="sports-tournament-tabs" id="sports-tournament-tabs"></div>
-
-              <div class="sports-bet-type-tabs" id="sports-bet-type-tabs">
-                <button class="bet-type-tab active" data-bet-type="winner">Match Winner</button>
-                <button class="bet-type-tab" data-bet-type="handicap">+1.5 Sets</button>
-                <button class="bet-type-tab" data-bet-type="ou">Over/Under</button>
-              </div>
-
-              <div class="sports-matches" id="sports-matches"></div>
-            </div>
-
-            <div class="yuki-confirm-slot" id="yuki-confirm-slot" hidden></div>
-
-            <div class="yuki-slot yuki-slot--bar" id="yuki-slot"></div>
-
-            <div class="bet-slip" id="bet-slip">
-              <div class="bet-slip-inner">
-                <div class="bet-slip-header">
-                  <span class="bet-slip-title">Bet Slip</span>
-                  <button class="bet-slip-clear" id="bet-slip-clear">✕</button>
+              <div class="sports-scroll-area">
+                <div class="wc-hero">
+                  <span class="wc-hero-eyebrow">FIFA World Cup 2026</span>
+                  <h1 class="wc-hero-title">Round of 16</h1>
                 </div>
-                <div class="bet-slip-selection" id="bet-slip-selection"></div>
-                <div class="bet-slip-stake-row" id="bet-slip-stake-row" hidden>
-                  <span class="bet-slip-stake-label">Stake</span>
-                  <span class="bet-slip-stake-value" id="bet-slip-stake">25</span>
-                </div>
-                <div class="bet-slip-bottom">
-                  <div class="chip-row chips bet-slip-chips" id="sports-chips">
-                    <button class="chip-pill" data-chip="10">10</button>
-                    <button class="chip-pill active" data-chip="25">25</button>
-                    <button class="chip-pill" data-chip="50">50</button>
-                    <button class="chip-pill" data-chip="100">100</button>
-                  </div>
-                  <div class="bet-returns-row">
-                    <span class="bet-returns-label">Return</span>
-                    <span class="bet-returns-value" id="bet-returns">—</span>
+
+                <div class="sports-toolbar">
+                  <div class="sports-view-tabs" id="sports-view-tabs" role="tablist" aria-label="Sports view"></div>
+                  <div class="sports-tournament-tabs" id="sports-tournament-tabs"></div>
+                  <div class="sports-bet-type-tabs" id="sports-bet-type-tabs">
+                    <button class="bet-type-tab active" data-bet-type="winner">Winner</button>
+                    <button class="bet-type-tab" data-bet-type="handicap">O/U 2.5</button>
+                    <button class="bet-type-tab" data-bet-type="ou">BTTS</button>
                   </div>
                 </div>
-                <button class="action-btn sports-place-btn" id="sports-place-btn" disabled>PLACE BET</button>
-              </div>
-            </div>
 
-          </div>
-        </section>
+                <div class="bracket-board" id="bracket-board" aria-label="Round of 16 bracket"></div>
+                <div class="sports-matches" id="sports-matches"></div>
+              </div>
+
+              <div class="yuki-confirm-slot" id="yuki-confirm-slot" hidden></div>
+              <div class="yuki-slot yuki-slot--bar" id="yuki-slot" hidden></div>
+
+              <div class="bet-slip mobile-bet-slip" id="bet-slip">
+                <div class="bet-slip-inner">
+                  <div class="bet-slip-header">
+                    <span class="bet-slip-title">Confirm bet</span>
+                    <button class="bet-slip-clear" id="bet-slip-clear">✕</button>
+                  </div>
+                  <div class="bet-slip-selection" id="bet-slip-selection"></div>
+                  <div class="bet-slip-stake-row" id="bet-slip-stake-row" hidden>
+                    <span class="bet-slip-stake-label">Stake</span>
+                    <span class="bet-slip-stake-value" id="bet-slip-stake">25</span>
+                  </div>
+                  <div class="bet-slip-bottom">
+                    <div class="chip-row chips bet-slip-chips" id="sports-chips">
+                      <button class="chip-pill" data-chip="10">10</button>
+                      <button class="chip-pill active" data-chip="25">25</button>
+                      <button class="chip-pill" data-chip="50">50</button>
+                      <button class="chip-pill" data-chip="100">100</button>
+                    </div>
+                    <div class="bet-returns-row">
+                      <span class="bet-returns-label">Return</span>
+                      <span class="bet-returns-value" id="bet-returns">—</span>
+                    </div>
+                  </div>
+                  <button class="action-btn sports-place-btn" id="sports-place-btn" disabled>Place bet</button>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          <aside class="desktop-aside" aria-label="Bet slip and Yuki">
+            <div class="desktop-slip-dock" id="desktop-slip-dock"></div>
+            <div class="desktop-yuki-dock" id="yuki-desktop-dock" aria-label="Yuki companion"></div>
+          </aside>
+        </div>
 
       </main>
     </div>
@@ -95,6 +118,7 @@
     <script src="js/config.js"></script>
     <script src="js/eventBus.js"></script>
     <script src="js/memory.js"></script>
+    <script src="js/yukiIntro.js"></script>
     <script src="js/character.js"></script>
     <script src="js/sessionConfig.js"></script>
     <script src="js/voice.js"></script>

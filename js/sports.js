@@ -1,5 +1,5 @@
 /**
- * sports.js — Multi-tournament Tennis Sports Betting
+ * sports.js — World Cup 2026 Round of 16 Sports Betting
  *
  * Public API on window.Sports:
  *   Sports.handleBetIntent()
@@ -12,132 +12,411 @@
   const bus = window.EventBus;
 
   // ── Match data ──────────────────────────────────────────────────────────────
+  // ── World Cup 2026 — Round of 16 (demo bracket) ───────────────────────────
   const MATCHES = [
-    // ── Wimbledon 2025 ──────────────────────────────────────────────────────
     {
-      id: "wim_sf1",
-      tournament: "Wimbledon",
-      round: "Semi-Final",
+      id: "r16_a1",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "west",
+      bracketLabel: "West · Match 1",
       surface: "Grass",
+      venue: "MetLife Stadium",
       status: "live",
       time: null,
-      score: "2-1 (7-5, 4-6, 3-2)",
-      stats: { p1: { aces: 12, firstServe: 71, breakPts: 3 }, p2: { aces: 8, firstServe: 64, breakPts: 1 } },
+      score: "1-0 (67')",
+      stats: { p1: { shots: 9, possession: 58, corners: 4 }, p2: { shots: 5, possession: 42, corners: 2 } },
       players: [
-        { id: "alcaraz",  name: "C. Alcaraz",  fullName: "Carlos Alcaraz",    flag: "🇪🇸", rank: 3, form: [1,1,1,1,0], baseOdds: 1.72, odds: 1.72, perf: 78 },
-        { id: "djokovic", name: "N. Djokovic", fullName: "Novak Djokovic",    flag: "🇷🇸", rank: 6, form: [1,1,0,1,1], baseOdds: 2.15, odds: 2.15, perf: 68 },
+        { id: "argentina", name: "Argentina", fullName: "Argentina", flag: "🇦🇷", rank: 1, form: [1,1,1,1,0], baseOdds: 1.48, odds: 1.48, perf: 91, stars: ["Lionel Messi", "Julián Álvarez", "Enzo Fernández"] },
+        { id: "mexico", name: "Mexico", fullName: "Mexico", flag: "🇲🇽", rank: 15, form: [1,0,1,1,0], baseOdds: 2.75, odds: 2.75, perf: 61, stars: ["Hirving Lozano", "Santiago Giménez", "Edson Álvarez"] },
       ],
     },
     {
-      id: "wim_sf2",
-      tournament: "Wimbledon",
-      round: "Semi-Final",
+      id: "r16_a2",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "west",
+      bracketLabel: "West · Match 2",
       surface: "Grass",
-      status: "live",
-      time: null,
-      score: "1-1 (6-3, 4-6, 0-0)",
-      stats: { p1: { aces: 14, firstServe: 68, breakPts: 2 }, p2: { aces: 5, firstServe: 73, breakPts: 4 } },
-      players: [
-        { id: "sinner",  name: "J. Sinner",  fullName: "Jannik Sinner",      flag: "🇮🇹", rank: 1, form: [1,1,1,0,1], baseOdds: 1.58, odds: 1.58, perf: 85 },
-        { id: "zverev",  name: "A. Zverev",  fullName: "Alexander Zverev",   flag: "🇩🇪", rank: 2, form: [1,0,1,1,1], baseOdds: 2.40, odds: 2.40, perf: 65 },
-      ],
-    },
-    {
-      id: "wim_qf1",
-      tournament: "Wimbledon",
-      round: "Quarter-Final",
-      surface: "Grass",
+      venue: "SoFi Stadium",
       status: "upcoming",
-      time: "Today, 13:00",
+      time: "Today, 21:00",
       score: null,
       stats: null,
       players: [
-        { id: "fritz",    name: "T. Fritz",   fullName: "Taylor Fritz",       flag: "🇺🇸", rank: 4, form: [1,1,0,1,0], baseOdds: 2.80, odds: 2.80, perf: 58 },
-        { id: "medvedev", name: "D. Medvedev",fullName: "Daniil Medvedev",    flag: "🇷🇺", rank: 5, form: [0,1,1,0,1], baseOdds: 1.45, odds: 1.45, perf: 72 },
+        { id: "france", name: "France", fullName: "France", flag: "🇫🇷", rank: 2, form: [1,1,1,0,1], baseOdds: 1.62, odds: 1.62, perf: 87, stars: ["Kylian Mbappé", "Ousmane Dembélé", "Aurélien Tchouaméni"] },
+        { id: "senegal", name: "Senegal", fullName: "Senegal", flag: "🇸🇳", rank: 18, form: [1,1,0,1,1], baseOdds: 2.35, odds: 2.35, perf: 68, stars: ["Sadio Mané", "Ismaïla Sarr", "Kalidou Koulibaly"] },
       ],
     },
     {
-      id: "wim_qf2",
-      tournament: "Wimbledon",
-      round: "Quarter-Final",
+      id: "r16_a3",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "west",
+      bracketLabel: "West · Match 3",
       surface: "Grass",
-      status: "upcoming",
-      time: "Today, 15:30",
-      score: null,
-      stats: null,
-      players: [
-        { id: "rune",    name: "H. Rune",    fullName: "Holger Rune",         flag: "🇩🇰", rank: 15, form: [1,0,1,1,0], baseOdds: 2.20, odds: 2.20, perf: 55 },
-        { id: "shelton", name: "B. Shelton", fullName: "Ben Shelton",          flag: "🇺🇸", rank: 14, form: [0,1,0,1,1], baseOdds: 1.70, odds: 1.70, perf: 60 },
-      ],
-    },
-
-    // ── ATP 1000 Cincinnati ──────────────────────────────────────────────────
-    {
-      id: "cin_qf1",
-      tournament: "Cincinnati",
-      round: "Quarter-Final",
-      surface: "Hard",
-      status: "live",
-      time: null,
-      score: "1-0 (6-4, 3-3*)",
-      stats: { p1: { aces: 6, firstServe: 62, breakPts: 2 }, p2: { aces: 9, firstServe: 70, breakPts: 1 } },
-      players: [
-        { id: "tsitsipas",  name: "S. Tsitsipas",  fullName: "Stefanos Tsitsipas", flag: "🇬🇷", rank: 9,  form: [0,1,1,0,1], baseOdds: 2.10, odds: 2.10, perf: 62 },
-        { id: "deminaur",   name: "A. de Minaur",  fullName: "Alex de Minaur",    flag: "🇦🇺", rank: 8,  form: [1,1,0,1,1], baseOdds: 1.80, odds: 1.80, perf: 69 },
-      ],
-    },
-    {
-      id: "cin_qf2",
-      tournament: "Cincinnati",
-      round: "Quarter-Final",
-      surface: "Hard",
+      venue: "AT&T Stadium",
       status: "upcoming",
       time: "Tomorrow, 18:00",
       score: null,
       stats: null,
       players: [
-        { id: "rublev", name: "A. Rublev", fullName: "Andrey Rublev",           flag: "🇷🇺", rank: 7,  form: [1,0,1,1,0], baseOdds: 1.90, odds: 1.90, perf: 66 },
-        { id: "draper", name: "J. Draper", fullName: "Jack Draper",             flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", rank: 12, form: [1,1,1,0,1], baseOdds: 2.00, odds: 2.00, perf: 71 },
+        { id: "brazil", name: "Brazil", fullName: "Brazil", flag: "🇧🇷", rank: 3, form: [1,1,0,1,1], baseOdds: 1.55, odds: 1.55, perf: 89, stars: ["Vinícius Júnior", "Rodrygo", "Endrick"] },
+        { id: "japan", name: "Japan", fullName: "Japan", flag: "🇯🇵", rank: 16, form: [1,0,1,1,1], baseOdds: 2.50, odds: 2.50, perf: 66, stars: ["Takefusa Kubo", "Kaoru Mitoma", "Wataru Endo"] },
       ],
     },
     {
-      id: "cin_qf3",
-      tournament: "Cincinnati",
-      round: "Quarter-Final",
-      surface: "Hard",
+      id: "r16_a4",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "west",
+      bracketLabel: "West · Match 4",
+      surface: "Grass",
+      venue: "Hard Rock Stadium",
       status: "upcoming",
-      time: "Tomorrow, 20:30",
+      time: "Tomorrow, 21:00",
       score: null,
       stats: null,
       players: [
-        { id: "tiafoe",  name: "F. Tiafoe", fullName: "Frances Tiafoe",        flag: "🇺🇸", rank: 18, form: [0,1,1,0,1], baseOdds: 3.20, odds: 3.20, perf: 48 },
-        { id: "musetti", name: "L. Musetti", fullName: "Lorenzo Musetti",      flag: "🇮🇹", rank: 16, form: [1,1,0,0,1], baseOdds: 1.35, odds: 1.35, perf: 74 },
+        { id: "england", name: "England", fullName: "England", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", rank: 4, form: [1,1,1,1,0], baseOdds: 1.70, odds: 1.70, perf: 84, stars: ["Harry Kane", "Jude Bellingham", "Bukayo Saka"] },
+        { id: "switzerland", name: "Switzerland", fullName: "Switzerland", flag: "🇨🇭", rank: 12, form: [0,1,1,1,0], baseOdds: 2.20, odds: 2.20, perf: 70, stars: ["Xherdan Shaqiri", "Granit Xhaka", "Breel Embolo"] },
       ],
     },
-
-    // ── Davis Cup ────────────────────────────────────────────────────────────
     {
-      id: "dc_r1",
-      tournament: "Davis Cup",
-      round: "Group Stage",
-      surface: "Clay",
+      id: "r16_b1",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "east",
+      bracketLabel: "East · Match 1",
+      surface: "Grass",
+      venue: "BC Place",
+      status: "live",
+      time: null,
+      score: "0-0 (41')",
+      stats: { p1: { shots: 6, possession: 54, corners: 3 }, p2: { shots: 4, possession: 46, corners: 1 } },
+      players: [
+        { id: "spain", name: "Spain", fullName: "Spain", flag: "🇪🇸", rank: 5, form: [1,1,1,1,1], baseOdds: 1.85, odds: 1.85, perf: 86, stars: ["Lamine Yamal", "Pedri", "Fabián Ruiz"] },
+        { id: "germany", name: "Germany", fullName: "Germany", flag: "🇩🇪", rank: 6, form: [1,1,0,1,1], baseOdds: 2.00, odds: 2.00, perf: 82, stars: ["Jamal Musiala", "Florian Wirtz", "Kai Havertz"] },
+      ],
+    },
+    {
+      id: "r16_b2",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "east",
+      bracketLabel: "East · Match 2",
+      surface: "Grass",
+      venue: "Levi's Stadium",
       status: "upcoming",
-      time: "Fri, 14:00",
+      time: "Sat, 17:00",
       score: null,
       stats: null,
       players: [
-        { id: "norrie",   name: "C. Norrie",  fullName: "Cameron Norrie",      flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", rank: 22, form: [1,0,1,0,1], baseOdds: 2.60, odds: 2.60, perf: 50 },
-        { id: "hurkacz",  name: "H. Hurkacz", fullName: "Hubert Hurkacz",      flag: "🇵🇱", rank: 10, form: [1,1,0,1,1], baseOdds: 1.52, odds: 1.52, perf: 73 },
+        { id: "portugal", name: "Portugal", fullName: "Portugal", flag: "🇵🇹", rank: 7, form: [1,1,1,0,1], baseOdds: 1.68, odds: 1.68, perf: 83, stars: ["Cristiano Ronaldo", "Bruno Fernandes", "Rafael Leão"] },
+        { id: "uruguay", name: "Uruguay", fullName: "Uruguay", flag: "🇺🇾", rank: 11, form: [1,0,1,1,0], baseOdds: 2.25, odds: 2.25, perf: 71, stars: ["Federico Valverde", "Darwin Núñez", "Ronald Araújo"] },
+      ],
+    },
+    {
+      id: "r16_b3",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "east",
+      bracketLabel: "East · Match 3",
+      surface: "Grass",
+      venue: "Gillette Stadium",
+      status: "upcoming",
+      time: "Sat, 20:00",
+      score: null,
+      stats: null,
+      players: [
+        { id: "netherlands", name: "Netherlands", fullName: "Netherlands", flag: "🇳🇱", rank: 8, form: [1,1,0,1,1], baseOdds: 1.95, odds: 1.95, perf: 78, stars: ["Virgil van Dijk", "Cody Gakpo", "Xavi Simons"] },
+        { id: "usa", name: "USA", fullName: "United States", flag: "🇺🇸", rank: 13, form: [1,1,1,0,0], baseOdds: 1.90, odds: 1.90, perf: 74, stars: ["Christian Pulisic", "Weston McKennie", "Timothy Weah"] },
+      ],
+    },
+    {
+      id: "r16_b4",
+      tournament: "World Cup 2026",
+      round: "Round of 16",
+      bracket: "east",
+      bracketLabel: "East · Match 4",
+      surface: "Grass",
+      venue: "Estadio Azteca",
+      status: "upcoming",
+      time: "Sun, 19:00",
+      score: null,
+      stats: null,
+      players: [
+        { id: "morocco", name: "Morocco", fullName: "Morocco", flag: "🇲🇦", rank: 10, form: [1,0,1,1,1], baseOdds: 2.40, odds: 2.40, perf: 72, stars: ["Achraf Hakimi", "Youssef En-Nesyri", "Sofyan Amrabat"] },
+        { id: "croatia", name: "Croatia", fullName: "Croatia", flag: "🇭🇷", rank: 9, form: [0,1,1,1,0], baseOdds: 1.62, odds: 1.62, perf: 76, stars: ["Luka Modrić", "Marcelo Brozović", "Andrej Kramarić"] },
       ],
     },
   ];
 
+  // Normalize star names → selectable players with perf scores
+  function slugifyStar(name) {
+    return String(name || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "");
+  }
+
+  function starName(star) {
+    return typeof star === "string" ? star : (star?.name || "");
+  }
+
+  function teamStars(team) {
+    return (team?.stars || []).map((s, i) => {
+      if (typeof s === "object" && s?.name) return s;
+      const name = String(s);
+      const perf = Math.round(Math.min(99, Math.max(52, (team.perf || 70) - i * 5 + (i === 0 ? 5 : 0))));
+      return { id: slugifyStar(name), name, perf };
+    });
+  }
+
+  MATCHES.forEach(m => {
+    m.players.forEach(p => { p.stars = teamStars(p); });
+  });
+
+  // Snapshot for tournament reset after the Final
+  const R16_SEED = JSON.parse(JSON.stringify(MATCHES));
+
+  /** Knockout tree — filled as Winner bets settle */
+  const BRACKET = {
+    cycle: 1,
+    west: { qf: [null, null, null, null], sf: [null, null], finalist: null },
+    east: { qf: [null, null, null, null], sf: [null, null], finalist: null },
+    champion: null,
+  };
+
+  const R16_FEED = {
+    r16_a1: ["west", 0], r16_a2: ["west", 1], r16_a3: ["west", 2], r16_a4: ["west", 3],
+    r16_b1: ["east", 0], r16_b2: ["east", 1], r16_b3: ["east", 2], r16_b4: ["east", 3],
+  };
+
+  function cloneTeam(t) {
+    if (!t) return null;
+    return {
+      id: t.id,
+      name: t.name,
+      fullName: t.fullName,
+      flag: t.flag,
+      rank: t.rank,
+      form: Array.isArray(t.form) ? [...t.form] : [1, 1, 0, 1, 1],
+      baseOdds: t.baseOdds ?? t.odds,
+      odds: t.odds,
+      perf: t.perf,
+      stars: teamStars(t).map(s => ({ ...s })),
+    };
+  }
+
+  function findTeamAnywhere(teamId) {
+    for (const m of MATCHES) {
+      const hit = m.players.find(p => p.id === teamId);
+      if (hit) return hit;
+    }
+    for (const side of ["west", "east"]) {
+      for (const t of BRACKET[side].qf) if (t?.id === teamId) return t;
+      for (const t of BRACKET[side].sf) if (t?.id === teamId) return t;
+      if (BRACKET[side].finalist?.id === teamId) return BRACKET[side].finalist;
+    }
+    return null;
+  }
+
+  function balanceOdds(a, b) {
+    const pa = a.perf || 70;
+    const pb = b.perf || 70;
+    const total = pa + pb || 1;
+    a.odds = Math.max(1.25, Math.round((1.15 + (pb / total) * 2.2) * 100) / 100);
+    b.odds = Math.max(1.25, Math.round((1.15 + (pa / total) * 2.2) * 100) / 100);
+    a.baseOdds = a.odds;
+    b.baseOdds = b.odds;
+  }
+
+  function makeKnockoutMatch({ id, side, round, bracketLabel, venue, a, b }) {
+    const p1 = cloneTeam(a);
+    const p2 = cloneTeam(b);
+    balanceOdds(p1, p2);
+    return {
+      id,
+      tournament: "World Cup 2026",
+      round,
+      bracket: side,
+      bracketLabel,
+      surface: "Grass",
+      venue,
+      status: "upcoming",
+      time: "Up next",
+      score: null,
+      stats: null,
+      stage: round === "Quarter-finals" ? "qf" : round === "Semi-finals" ? "sf" : "final",
+      players: [p1, p2],
+      winnerId: null,
+      loserId: null,
+    };
+  }
+
+  function ensureMatch(id, factory) {
+    if (MATCHES.some(m => m.id === id)) return;
+    MATCHES.push(factory());
+  }
+
+  function unlockDownstream() {
+    for (const side of ["west", "east"]) {
+      const label = side === "west" ? "West" : "East";
+      for (let i = 0; i < 2; i++) {
+        const a = BRACKET[side].qf[i * 2];
+        const b = BRACKET[side].qf[i * 2 + 1];
+        if (!a || !b) continue;
+        ensureMatch(`${side}_qf_${i}`, () => makeKnockoutMatch({
+          id: `${side}_qf_${i}`,
+          side,
+          round: "Quarter-finals",
+          bracketLabel: `${label} · Quarter-final ${i + 1}`,
+          venue: side === "west" ? "SoFi Stadium" : "MetLife Stadium",
+          a, b,
+        }));
+      }
+      const s0 = BRACKET[side].sf[0];
+      const s1 = BRACKET[side].sf[1];
+      if (s0 && s1) {
+        ensureMatch(`${side}_sf`, () => makeKnockoutMatch({
+          id: `${side}_sf`,
+          side,
+          round: "Semi-finals",
+          bracketLabel: `${label} · Semi-final`,
+          venue: "AT&T Stadium",
+          a: s0, b: s1,
+        }));
+      }
+    }
+    if (BRACKET.west.finalist && BRACKET.east.finalist) {
+      ensureMatch("final", () => makeKnockoutMatch({
+        id: "final",
+        side: "west",
+        round: "Final",
+        bracketLabel: "World Cup Final · New York",
+        venue: "MetLife Stadium",
+        a: BRACKET.west.finalist,
+        b: BRACKET.east.finalist,
+      }));
+    }
+  }
+
+  function generateScore(winner, loser) {
+    const w = 1 + Math.floor(Math.random() * 3);
+    const l = Math.floor(Math.random() * Math.min(2, w));
+    // Orientation by original player order happens in settle
+    return { w, l };
+  }
+
+  function advanceWinner(match, winner) {
+    const w = cloneTeam(winner);
+    if (!w) return null;
+
+    let slot = null;
+    if (R16_FEED[match.id]) {
+      const [side, idx] = R16_FEED[match.id];
+      BRACKET[side].qf[idx] = w;
+      slot = `${side}-qf-${idx}`;
+    } else if (/_qf_(\d)$/.test(match.id)) {
+      const side = match.bracket;
+      const idx = Number(match.id.slice(-1));
+      BRACKET[side].sf[idx] = w;
+      slot = `${side}-sf-${idx}`;
+    } else if (match.id.endsWith("_sf")) {
+      BRACKET[match.bracket].finalist = w;
+      slot = `${match.bracket}-final`;
+    } else if (match.id === "final") {
+      BRACKET.champion = w;
+      slot = "champion";
+    }
+
+    unlockDownstream();
+    return slot;
+  }
+
+  function playBracketAdvance(fromRect, slotKey, team) {
+    if (!fromRect || !slotKey || !team) return;
+    const destCell = document.querySelector(`[data-bt-slot="${slotKey}"]`);
+    const flagEl = destCell?.querySelector(".bt-flag");
+    if (!flagEl) return;
+    const capsule = destCell.closest(".bt-capsule");
+    const to = flagEl.getBoundingClientRect();
+    flagEl.classList.add("bt-flag--await");
+    capsule?.classList.add("bt-capsule--await");
+
+    const ghost = document.createElement("div");
+    ghost.className = "bt-fly-ghost";
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.innerHTML = `<span class="bt-fly-emoji">${team.flag}</span>`;
+    ghost.style.left = `${fromRect.left}px`;
+    ghost.style.top = `${fromRect.top}px`;
+    ghost.style.width = `${Math.max(28, fromRect.width)}px`;
+    ghost.style.height = `${Math.max(28, fromRect.height)}px`;
+    document.body.appendChild(ghost);
+
+    void ghost.offsetWidth;
+    const dx = to.left + to.width / 2 - (fromRect.left + fromRect.width / 2);
+    const dy = to.top + to.height / 2 - (fromRect.top + fromRect.height / 2);
+    ghost.style.transform = `translate(${dx}px, ${dy}px) scale(1.2)`;
+
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      ghost.remove();
+      flagEl.classList.remove("bt-flag--await");
+      capsule?.classList.remove("bt-capsule--await");
+      flagEl.classList.add("bt-flag--landed");
+      capsule?.classList.add("bt-capsule--landed");
+      setTimeout(() => {
+        flagEl.classList.remove("bt-flag--landed");
+        capsule?.classList.remove("bt-capsule--landed");
+      }, 1000);
+    };
+    ghost.addEventListener("transitionend", finish, { once: true });
+    setTimeout(finish, 750);
+  }
+
+  function resetTournament() {
+    BRACKET.cycle += 1;
+    BRACKET.west = { qf: [null, null, null, null], sf: [null, null], finalist: null };
+    BRACKET.east = { qf: [null, null, null, null], sf: [null, null], finalist: null };
+    BRACKET.champion = null;
+
+    MATCHES.length = 0;
+    const fresh = JSON.parse(JSON.stringify(R16_SEED));
+    fresh.forEach(m => MATCHES.push(m));
+    MATCHES.forEach(m => {
+      m.players.forEach(p => { p.stars = teamStars(p); });
+      m.winnerId = null;
+      m.loserId = null;
+    });
+
+    selectedMatchId = selectedPlayerId = selectedStarId = null;
+    showFlashMsg(`New World Cup cycle #${BRACKET.cycle} — back to Round of 16!`, "win");
+    renderMatches();
+    syncBoardToVoice();
+  }
+
+  function currentStageLabel() {
+    if (BRACKET.champion) return "Champion crowned";
+    if (MATCHES.some(m => m.id === "final" && m.status !== "final")) return "Final";
+    if (MATCHES.some(m => m.stage === "sf" && m.status !== "final")) return "Semi-finals";
+    if (MATCHES.some(m => m.stage === "qf" && m.status !== "final")) return "Quarter-finals";
+    return "Round of 16 — paths open";
+  }
+
   // ── State ────────────────────────────────────────────────────────────────────
   let selectedMatchId  = null;
-  let selectedPlayerId = null;
+  let selectedPlayerId = null; // team id (bet is always on the team)
+  let selectedStarId   = null; // optional star lean within that team
   let selectedChip     = 25;
   let activeTournament = "all";
   let activeBetType    = "winner"; // winner | handicap | ou
+  let activeView       = "matches"; // matches | bracket (phone section switch)
   let oddsTickInterval = null;
 
   let yukiFlowState   = "idle";
@@ -178,12 +457,13 @@
   // ── Odds drift ───────────────────────────────────────────────────────────────
   function driftOdds() {
     MATCHES.forEach(m => {
+      if (m.status === "final") return;
       // Also drift live stats for live matches
       if (m.status === "live" && m.stats) {
-        m.stats.p1.aces     = Math.max(0, m.stats.p1.aces + (Math.random() > 0.7 ? 1 : 0));
-        m.stats.p1.firstServe = Math.min(85, Math.max(50, m.stats.p1.firstServe + Math.round((Math.random()-0.5)*3)));
-        m.stats.p2.aces     = Math.max(0, m.stats.p2.aces + (Math.random() > 0.7 ? 1 : 0));
-        m.stats.p2.firstServe = Math.min(85, Math.max(50, m.stats.p2.firstServe + Math.round((Math.random()-0.5)*3)));
+        m.stats.p1.shots = Math.max(0, m.stats.p1.shots + (Math.random() > 0.75 ? 1 : 0));
+        m.stats.p1.possession = Math.min(72, Math.max(28, m.stats.p1.possession + Math.round((Math.random()-0.5)*2)));
+        m.stats.p2.shots = Math.max(0, m.stats.p2.shots + (Math.random() > 0.75 ? 1 : 0));
+        m.stats.p2.possession = 100 - m.stats.p1.possession;
 
         // Update stats row if rendered
         const statsRow = document.querySelector(`#card-${m.id} .match-live-stats`);
@@ -231,19 +511,288 @@
     matchesEl = document.getElementById("sports-matches");
     if (!matchesEl) return;
 
+    renderViewTabs();
     renderTournamentTabs();
+    applySportsView();
+    renderBracket();
     renderMatches();
     bindBetSlip();
     updateBetTypeUI();
+    if (!window.__sportsViewResizeBound) {
+      window.__sportsViewResizeBound = true;
+      window.addEventListener("resize", () => {
+        applySportsView();
+        renderViewTabs();
+      });
+    }
+  }
+
+  function isPhoneLayout() {
+    return window.matchMedia("(max-width: 1099px)").matches;
+  }
+
+  function renderViewTabs() {
+    const tabsEl = document.getElementById("sports-view-tabs");
+    if (!tabsEl) return;
+    const phone = isPhoneLayout();
+    tabsEl.hidden = !phone;
+    if (!phone) return;
+
+    const views = [
+      { id: "matches", label: "Matches" },
+      { id: "bracket", label: "Bracket" },
+    ];
+    tabsEl.innerHTML = views.map(v =>
+      `<button type="button" class="view-tab${v.id === activeView ? " active" : ""}" data-view="${v.id}" role="tab" aria-selected="${v.id === activeView}">
+        ${v.label}
+      </button>`
+    ).join("");
+    tabsEl.querySelectorAll(".view-tab").forEach(btn => {
+      btn.addEventListener("click", () => selectView(btn.dataset.view));
+    });
+  }
+
+  function selectView(viewId, { scroll = true } = {}) {
+    activeView = viewId === "bracket" ? "bracket" : "matches";
+    applySportsView();
+    renderViewTabs();
+    if (activeView === "bracket") {
+      renderBracket();
+      if (scroll) {
+        document.getElementById("bracket-board")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    } else {
+      renderMatches();
+    }
+    syncBoardToVoice();
+  }
+
+  function applySportsView() {
+    const phone = isPhoneLayout();
+    const board = document.getElementById("bracket-board");
+    const matches = document.getElementById("sports-matches");
+    const betTypes = document.getElementById("sports-bet-type-tabs");
+    const tourTabs = document.getElementById("sports-tournament-tabs");
+
+    document.body.classList.toggle("sports-view-bracket", phone && activeView === "bracket");
+    document.body.classList.toggle("sports-view-matches", phone && activeView === "matches");
+
+    if (!phone) {
+      if (board) board.hidden = false;
+      if (matches) matches.hidden = false;
+      if (betTypes) betTypes.hidden = false;
+      if (tourTabs) tourTabs.hidden = false;
+      document.body.classList.remove("sports-view-bracket", "sports-view-matches");
+      return;
+    }
+
+    if (board) board.hidden = activeView !== "bracket";
+    if (matches) matches.hidden = activeView !== "matches";
+    if (betTypes) betTypes.hidden = activeView === "bracket";
+    if (tourTabs) tourTabs.hidden = activeView === "bracket";
+  }
+
+  function renderBracket() {
+    const board = document.getElementById("bracket-board");
+    if (!board) return;
+
+    const r16West = MATCHES.filter(m => m.id.startsWith("r16_a"));
+    const r16East = MATCHES.filter(m => m.id.startsWith("r16_b"));
+
+    const flagNode = (team, { size = "", live = false, out = false, advanced = false, slot = "" } = {}) => {
+      if (!team) {
+        return `<span class="bt-flag bt-flag--empty${size ? ` bt-flag--${size}` : ""}" title="Awaiting winner" aria-hidden="true"></span>`;
+      }
+      const cls = [
+        "bt-flag",
+        size ? `bt-flag--${size}` : "",
+        live ? "is-live" : "",
+        out ? "is-out" : "",
+        advanced ? "is-advanced" : "",
+      ].filter(Boolean).join(" ");
+      return `<span class="${cls}"${slot ? ` data-bt-team="${team.id}"` : ""} title="${team.fullName}" aria-label="${team.fullName}">
+        <span class="bt-flag-emoji">${team.flag}</span>
+      </span>`;
+    };
+
+    const teamBtn = (team, match, opts = {}) => {
+      if (!team || !match) return flagNode(null, opts);
+      const out = match.winnerId && match.winnerId !== team.id;
+      const advanced = match.winnerId === team.id;
+      return `<button type="button" class="bt-flag${opts.size ? ` bt-flag--${opts.size}` : ""}${match.status === "live" ? " is-live" : ""}${out ? " is-out" : ""}${advanced ? " is-advanced" : ""}"
+        data-match="${match.id}" data-team="${team.id}"
+        title="${team.fullName}${team.odds ? ` · ${team.odds.toFixed(2)}` : ""}"
+        aria-label="${team.fullName}">
+        <span class="bt-flag-emoji">${team.flag}</span>
+      </button>`;
+    };
+
+    const teamCell = (team, { size = "sm", slot = "", match = null, live = false } = {}) => {
+      const advanced = !!team;
+      const inner = match
+        ? teamBtn(team, match, { size })
+        : flagNode(team, { size, advanced, slot });
+      return `<div class="bt-team-cell"${slot ? ` data-bt-slot="${slot}"` : ""}>
+        ${inner}
+        <span class="bt-team-name${team ? "" : " bt-team-name--muted"}">${team ? team.name : "TBD"}</span>
+      </div>`;
+    };
+
+    const capsule = ({ children, live = false, done = false, matchId = "", filled = false, empty = false, extra = "" } = {}) =>
+      `<div class="bt-capsule${live ? " is-live" : ""}${done ? " is-done" : ""}${filled ? " is-filled" : ""}${empty ? " is-empty" : ""}${extra}"${matchId ? ` data-match="${matchId}"` : ""}>
+        ${children}
+      </div>`;
+
+    const r16Pair = (m) => {
+      if (!m) return capsule({ empty: true, children: "" });
+      const [a, b] = m.players;
+      const live = m.status === "live";
+      const done = m.status === "final";
+      return capsule({
+        live,
+        done,
+        matchId: m.id,
+        filled: done,
+        children: `
+          ${live ? '<span class="bt-live-tag">LIVE</span>' : ""}
+          ${done ? `<span class="bt-score-tag">${m.score || "FT"}</span>` : ""}
+          <div class="bt-pair-flags">
+            ${teamCell(a, { match: m })}
+            ${teamCell(b, { match: m })}
+          </div>`,
+      });
+    };
+
+    /** Later rounds use the same capsule language as R16 */
+    const roundCapsule = (teams, slots, size = "sm") => {
+      const filled = teams.some(Boolean);
+      const empty = !filled;
+      return capsule({
+        filled,
+        empty,
+        children: `<div class="bt-pair-flags">${teams.map((t, i) => teamCell(t, { size, slot: slots[i] })).join("")}</div>`,
+      });
+    };
+
+    const sideColumn = (side, r16Matches) => {
+      const tree = BRACKET[side];
+      const mirror = side === "east";
+      const r16Html = r16Matches.map(r16Pair).join("");
+      const qfHtml = [0, 1].map(i =>
+        roundCapsule(
+          [tree.qf[i * 2], tree.qf[i * 2 + 1]],
+          [`${side}-qf-${i * 2}`, `${side}-qf-${i * 2 + 1}`],
+          "sm"
+        )
+      ).join("");
+      const sfHtml = roundCapsule(
+        [tree.sf[0], tree.sf[1]],
+        [`${side}-sf-0`, `${side}-sf-1`],
+        "md"
+      );
+
+      const rounds = mirror
+        ? `<div class="bt-round bt-sf"><div class="bt-round-tag">SF</div>${sfHtml}</div>
+           <div class="bt-rail" aria-hidden="true"></div>
+           <div class="bt-round bt-qf"><div class="bt-round-tag">QF</div>${qfHtml}</div>
+           <div class="bt-rail bt-rail--wide" aria-hidden="true"></div>
+           <div class="bt-round bt-r16"><div class="bt-round-tag">R16</div>${r16Html}</div>`
+        : `<div class="bt-round bt-r16"><div class="bt-round-tag">R16</div>${r16Html}</div>
+           <div class="bt-rail bt-rail--wide" aria-hidden="true"></div>
+           <div class="bt-round bt-qf"><div class="bt-round-tag">QF</div>${qfHtml}</div>
+           <div class="bt-rail" aria-hidden="true"></div>
+           <div class="bt-round bt-sf"><div class="bt-round-tag">SF</div>${sfHtml}</div>`;
+
+      return `<div class="bt-side bt-${side}">
+        <div class="bt-round-label">${side === "west" ? "West" : "East"}</div>
+        <div class="bt-rounds${mirror ? " bt-rounds--mirror" : ""}">${rounds}</div>
+      </div>`;
+    };
+
+    const finalA = BRACKET.west.finalist;
+    const finalB = BRACKET.east.finalist;
+    const champ = BRACKET.champion;
+
+    board.innerHTML = `
+      <div class="bracket-tree" role="img" aria-label="World Cup 2026 knockout bracket">
+        <div class="bt-tree-head">
+          <span class="bt-tree-kicker">FIFA World Cup 2026</span>
+          <span class="bt-tree-stage">${currentStageLabel()}</span>
+        </div>
+        <div class="bt-tree-body">
+          ${sideColumn("west", r16West)}
+          <div class="bt-final${champ ? " is-crowned" : ""}">
+            <div class="bt-final-title">${champ ? "CHAMPION" : "FINAL"}</div>
+            <div class="bt-final-stage">
+              ${champ
+                ? capsule({
+                    filled: true,
+                    extra: " bt-capsule--champ",
+                    children: `<div class="bt-pair-flags">${teamCell(champ, { size: "lg", slot: "champion" })}</div>`,
+                  })
+                : capsule({
+                    filled: !!(finalA || finalB),
+                    empty: !(finalA || finalB),
+                    children: `<div class="bt-pair-flags">
+                      ${teamCell(finalA, { size: "lg", slot: "west-final" })}
+                      ${teamCell(finalB, { size: "lg", slot: "east-final" })}
+                    </div>`,
+                  })
+              }
+            </div>
+            <div class="bt-final-meta">${champ ? `${champ.flag} lifts the trophy` : "TBD · New York"}</div>
+            <div class="bt-final-note">Winner bets move teams forward · Final resets the draw</div>
+          </div>
+          ${sideColumn("east", r16East)}
+        </div>
+      </div>`;
+
+    const focusMatch = (matchId) => {
+      const card = document.getElementById(`card-${matchId}`);
+      if (!card) {
+        showFlashMsg("That tie is settled — follow it on the bracket", "lose");
+        return;
+      }
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      card.classList.add("match-card-flash");
+      setTimeout(() => card.classList.remove("match-card-flash"), 1200);
+    };
+
+    board.querySelectorAll(".bt-flag[data-match]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const matchId = btn.dataset.match;
+        const teamId = btn.dataset.team;
+        const match = MATCHES.find(m => m.id === matchId);
+        if (!match || match.status === "final") {
+          focusMatch(matchId);
+          return;
+        }
+        focusMatch(matchId);
+        if (teamId && activeBetType === "winner") {
+          selectedStarId = null;
+          selectOdds(matchId, teamId);
+        }
+      });
+    });
+    board.querySelectorAll(".bt-capsule[data-match]").forEach(pair => {
+      pair.addEventListener("click", (e) => {
+        if (e.target.closest(".bt-flag")) return;
+        focusMatch(pair.dataset.match);
+      });
+    });
   }
 
   function renderTournamentTabs() {
     const tabsEl = document.getElementById("sports-tournament-tabs");
     if (!tabsEl) return;
-    const tournaments = ["all", ...new Set(MATCHES.map(m => m.tournament))];
-    tabsEl.innerHTML = tournaments.map(t =>
-      `<button class="tour-tab${t === activeTournament ? " active" : ""}" data-tour="${t}">
-        ${t === "all" ? "All Tournaments" : t}
+    const filters = [
+      { id: "all", label: "All matches" },
+      { id: "live", label: "Live only" },
+    ];
+    const uiFilter = activeTournament === "live" ? "live" : "all";
+    tabsEl.innerHTML = filters.map(t =>
+      `<button class="tour-tab${t.id === uiFilter ? " active" : ""}" data-tour="${t.id}">
+        ${t.label}
       </button>`
     ).join("");
     tabsEl.querySelectorAll(".tour-tab").forEach(btn => {
@@ -252,9 +801,15 @@
   }
 
   function getVisibleMatches() {
-    return activeTournament === "all"
-      ? MATCHES
-      : MATCHES.filter(m => m.tournament === activeTournament);
+    // Settled ties live on the bracket; cards show open fixtures only
+    let pool = MATCHES.filter(m => m.status !== "final");
+    if (activeTournament === "live") pool = pool.filter(m => m.status === "live");
+    else if (activeTournament === "west" || activeTournament === "east") {
+      pool = pool.filter(m => m.bracket === activeTournament);
+    }
+    // Prefer later rounds first when unlocked
+    const rank = (m) => (m.round === "Final" ? 0 : m.round === "Semi-finals" ? 1 : m.round === "Quarter-finals" ? 2 : 3);
+    return pool.slice().sort((a, b) => rank(a) - rank(b) || String(a.id).localeCompare(b.id));
   }
 
   function formatMatchLine(m) {
@@ -482,7 +1037,12 @@
 
   function getBoardState() {
     const visible = getVisibleMatches();
-    const tabLabel = activeTournament === "all" ? "All Tournaments" : activeTournament;
+    const tabLabel =
+      activeTournament === "all" ? "All matches"
+      : activeTournament === "live" ? "Live only"
+      : activeTournament === "west" ? "West side"
+      : activeTournament === "east" ? "East side"
+      : activeTournament;
 
     let betSlip = null;
     if (slipCommitted && selectedMatchId && selectedPlayerId) {
@@ -611,11 +1171,17 @@
     }
     screen += `${describeFlowStep()}\n`;
 
+    const starBook = MATCHES.map(m =>
+      m.players.map(p => `${p.fullName}: ${teamStars(p).map(s => s.name).join(", ")}`).join("; ")
+    ).join(" | ");
+
     const roster =
-      "FULL DEMO ROSTER (all tabs — never invent off-list names): " +
+      "FULL DEMO ROSTER — World Cup 2026 Round of 16 teams only (never invent off-list nations): " +
       `${tourSummaries}. ` +
-      "Tournaments available: Wimbledon, Cincinnati, Davis Cup. " +
-      "When the player opens a tournament tab, ONLY discuss players listed under CURRENT SCREEN.";
+      "View filters: All matches, Live only (West/East are labeled on the bracket tree). " +
+      "STAR PLAYERS Yuki knows well (use for insight when recommending a TEAM bet — bets are on teams, not individuals): " +
+      `${starBook}. ` +
+      "When a filter is active, ONLY discuss teams listed under CURRENT SCREEN.";
 
     return `${screen}\n${roster}`;
   }
@@ -640,7 +1206,7 @@
     tab?.classList.add("tour-tab-flash");
     setTimeout(() => tab?.classList.remove("tour-tab-flash"), 1400);
 
-    const pool = tournamentId === "all" ? MATCHES : MATCHES.filter(m => m.tournament === tournamentId);
+    const pool = getVisibleMatches();
     const target = pool.find(m => m.status === "live") || pool[0];
     if (target) {
       setTimeout(() => {
@@ -650,23 +1216,37 @@
   }
 
   function summarizeTournament(tournamentId) {
-    const pool = tournamentId === "all" ? MATCHES : MATCHES.filter(m => m.tournament === tournamentId);
+    const prev = activeTournament;
+    activeTournament = tournamentId;
+    const pool = getVisibleMatches();
+    activeTournament = prev;
     if (!pool.length) return "No matches listed right now.";
     return pool.map(m => {
       const [p1, p2] = m.players;
       const status = m.status === "live"
         ? `LIVE now, score ${m.score}`
         : `upcoming ${m.time || "soon"}`;
-      return `${m.round}: ${p1.fullName} vs ${p2.fullName} (${status}, odds ${p1.odds.toFixed(2)} / ${p2.odds.toFixed(2)})`;
+      const stars = [...teamStars(p1).slice(0, 2), ...teamStars(p2).slice(0, 2)]
+        .map(s => s.name)
+        .join(", ");
+      return `${m.bracketLabel || m.round}: ${p1.fullName} vs ${p2.fullName} (${status}, odds ${p1.odds.toFixed(2)} / ${p2.odds.toFixed(2)}; stars: ${stars})`;
     }).join(". ");
   }
 
   function findTournamentBySpeech(text) {
     const t = (text || "").toLowerCase();
-    if (/\b(all tournaments|every tournament|all matches)\b/.test(t)) return "all";
-    if (/\b(cincinnati|cincy)\b/.test(t)) return "Cincinnati";
-    if (/\b(davis cup|davis)\b/.test(t)) return "Davis Cup";
-    if (/\bwimbledon\b/.test(t)) return "Wimbledon";
+    if (/\b(bracket|tree|knockout)\b/.test(t) && !/\bfull bracket\b/.test(t)) {
+      selectView("bracket", { scroll: true });
+      return "all";
+    }
+    if (/\b(full bracket|all matches|whole bracket|entire bracket|show all|matches)\b/.test(t)) {
+      if (isPhoneLayout()) selectView("matches", { scroll: false });
+      return "all";
+    }
+    if (/\b(west|left) (bracket|side)?\b/.test(t) || /\bwest bracket\b/.test(t)) return "west";
+    if (/\b(east|right) (bracket|side)?\b/.test(t) || /\beast bracket\b/.test(t)) return "east";
+    if (/\blive\b/.test(t)) return "live";
+    if (/\b(world cup|wc ?2026|fifa)\b/.test(t)) return "all";
     return null;
   }
 
@@ -682,7 +1262,7 @@
     const NAV_CUES = /\b(check|check out|checkout|show|switch|go to|take me|see|look|what|tell|happening|going on|anything|matches|there|about|at|open|view|want to|want|browse|explore|navigate|filter|let me see|let's see|lets see)\b/;
     if (NAV_CUES.test(t)) return true;
 
-    // Bare tournament mention with no roster player — e.g. "Davis Cup", "Wimbledon"
+    // Bare bracket mention with no roster team — e.g. "West bracket", "World Cup"
     if (!findPlayerByName(t) && !fuzzyFindPlayer(t)) return true;
 
     return false;
@@ -725,26 +1305,79 @@
 
   function renderMatches() {
     if (!matchesEl) return;
-    const visible = activeTournament === "all"
-      ? MATCHES
-      : MATCHES.filter(m => m.tournament === activeTournament);
+    const visible = getVisibleMatches();
     matchesEl.innerHTML = visible.map(m => renderMatchCard(m)).join("");
+    renderBracket();
 
     matchesEl.querySelectorAll(".player-odds-btn").forEach(btn => {
-      btn.addEventListener("click", () => selectOdds(btn.dataset.match, btn.dataset.player));
+      btn.addEventListener("click", () => {
+        selectedStarId = null;
+        selectOdds(btn.dataset.match, btn.dataset.player);
+      });
+    });
+    matchesEl.querySelectorAll(".star-chip").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        selectStar(btn.dataset.match, btn.dataset.team, btn.dataset.star);
+      });
     });
     updateBestBadgesVisibility();
+  }
+
+  function selectStar(matchId, teamId, starId) {
+    selectedStarId = starId;
+    selectOdds(matchId, teamId, { animate: true });
+    document.querySelectorAll(".star-chip").forEach(chip => {
+      const on = chip.dataset.match === matchId && chip.dataset.star === starId;
+      chip.classList.toggle("selected", on);
+    });
   }
 
   function buildStatsRowHTML(m) {
     const { p1, p2 } = m.stats;
     return `
-      <span class="stat-item"><span class="stat-val">${p1.aces}</span><span class="stat-key">ACE</span><span class="stat-val">${p2.aces}</span></span>
+      <span class="stat-item"><span class="stat-val">${p1.shots}</span><span class="stat-key">SHOTS</span><span class="stat-val">${p2.shots}</span></span>
       <span class="stat-divider"></span>
-      <span class="stat-item"><span class="stat-val">${p1.firstServe}%</span><span class="stat-key">1ST SRV</span><span class="stat-val">${p2.firstServe}%</span></span>
+      <span class="stat-item"><span class="stat-val">${p1.possession}%</span><span class="stat-key">POSS</span><span class="stat-val">${p2.possession}%</span></span>
       <span class="stat-divider"></span>
-      <span class="stat-item"><span class="stat-val">${p1.breakPts}</span><span class="stat-key">BRK PTS</span><span class="stat-val">${p2.breakPts}</span></span>
+      <span class="stat-item"><span class="stat-val">${p1.corners}</span><span class="stat-key">CRN</span><span class="stat-val">${p2.corners}</span></span>
     `;
+  }
+
+  function bestStarsInMatch(m) {
+    const all = m.players.flatMap(p => teamStars(p).map(s => ({ ...s, teamId: p.id })));
+    if (!all.length) return new Set();
+    const top = Math.max(...all.map(s => s.perf));
+    return new Set(all.filter(s => s.perf >= top - 1).map(s => s.id));
+  }
+
+  function renderStarPicks(m) {
+    if (activeBetType !== "winner") return "";
+    const bestIds = bestStarsInMatch(m);
+    const col = (team) => {
+      const stars = teamStars(team);
+      return `<div class="star-col">
+        <div class="star-col-head">${team.flag} ${team.name}</div>
+        <div class="star-chips">
+          ${stars.map(s => {
+            const isBest = bestIds.has(s.id);
+            const isSel = selectedMatchId === m.id && selectedStarId === s.id;
+            return `<button type="button" class="star-chip${isBest ? " is-best" : ""}${isSel ? " selected" : ""}" data-match="${m.id}" data-team="${team.id}" data-star="${s.id}" title="Lean ${s.name} — bet stays on ${team.name}">
+              ${isBest ? '<span class="star-best-tag">Best</span>' : ""}
+              <span class="star-chip-name">${s.name}</span>
+              <span class="star-chip-perf">${s.perf}</span>
+            </button>`;
+          }).join("")}
+        </div>
+      </div>`;
+    };
+    return `<div class="star-picks" aria-label="Pick a standout player">
+      <div class="star-picks-label">Standout players · tap to lean</div>
+      <div class="star-picks-grid">
+        ${col(m.players[0])}
+        ${col(m.players[1])}
+      </div>
+    </div>`;
   }
 
   function renderMatchCard(m) {
@@ -785,15 +1418,15 @@
       ? `<div class="match-live-stats">${buildStatsRowHTML(m)}</div>`
       : "";
 
-    // Handicap / O/U odds are derived from base odds
-    const p1HandicapOdds = (p1.odds * 0.72).toFixed(2);
-    const p2HandicapOdds = (p2.odds * 0.72).toFixed(2);
-    const ouOverOdds  = "1.85";
-    const ouUnderOdds = "1.95";
+    // O/U 2.5 and BTTS odds derived from base odds
+    const p1HandicapOdds = "1.90"; // Over 2.5
+    const p2HandicapOdds = "1.90"; // Under 2.5
+    const ouOverOdds  = "1.80"; // BTTS Yes
+    const ouUnderOdds = "2.00"; // BTTS No
 
     const oddsSection = activeBetType === "winner" ? `
       <button class="player-odds-btn${sel1}${yuki1}" data-match="${m.id}" data-player="${p1.id}">
-        ${showBestBadge(p1) ? '<span class="best-pick-badge">⭐ Best</span>' : ""}
+        ${showBestBadge(p1) ? '<span class="best-pick-badge">Best form</span>' : ""}
         <span class="player-flag">${p1.flag}</span>
         <span class="player-name">${p1.name}</span>
         <span class="player-rank">#${p1.rank}</span>
@@ -803,7 +1436,7 @@
       </button>
       <div class="match-vs-col"><span class="match-vs">VS</span>${scoreOrTime}</div>
       <button class="player-odds-btn${sel2}${yuki2}" data-match="${m.id}" data-player="${p2.id}">
-        ${showBestBadge(p2) ? '<span class="best-pick-badge">⭐ Best</span>' : ""}
+        ${showBestBadge(p2) ? '<span class="best-pick-badge">Best form</span>' : ""}
         <span class="player-flag">${p2.flag}</span>
         <span class="player-name">${p2.name}</span>
         <span class="player-rank">#${p2.rank}</span>
@@ -813,36 +1446,39 @@
       </button>
     ` : activeBetType === "handicap" ? `
       <button class="player-odds-btn handicap${sel1}" data-match="${m.id}" data-player="${p1.id}">
-        <span class="player-flag">${p1.flag}</span>
-        <span class="player-name">${p1.name} +1.5</span>
+        <span class="player-flag">⬆️</span>
+        <span class="player-name">Over 2.5</span>
         <span class="player-odds-val">${p1HandicapOdds}</span>
       </button>
-      <div class="match-vs-col"><span class="match-vs">HC</span></div>
+      <div class="match-vs-col"><span class="match-vs">O/U</span></div>
       <button class="player-odds-btn handicap${sel2}" data-match="${m.id}" data-player="${p2.id}">
-        <span class="player-flag">${p2.flag}</span>
-        <span class="player-name">${p2.name} +1.5</span>
+        <span class="player-flag">⬇️</span>
+        <span class="player-name">Under 2.5</span>
         <span class="player-odds-val">${p2HandicapOdds}</span>
       </button>
     ` : `
       <button class="player-odds-btn ou${sel1}" data-match="${m.id}" data-player="${p1.id}">
-        <span class="player-name">Over 3.5 Sets</span>
+        <span class="player-name">BTTS Yes</span>
         <span class="player-odds-val">${ouOverOdds}</span>
       </button>
-      <div class="match-vs-col"><span class="match-vs">O/U</span></div>
+      <div class="match-vs-col"><span class="match-vs">BTTS</span></div>
       <button class="player-odds-btn ou${sel2}" data-match="${m.id}" data-player="${p2.id}">
-        <span class="player-name">Under 3.5 Sets</span>
+        <span class="player-name">BTTS No</span>
         <span class="player-odds-val">${ouUnderOdds}</span>
       </button>
     `;
 
+    const sideLabel = m.bracket === "west" ? "West" : "East";
+
     return `
 <div class="match-card${selectedMatchId === m.id && selectedPlayerId ? " has-selection" : ""}" id="card-${m.id}">
   <div class="match-header">
-    <span class="match-tournament">${m.tournament} <span class="match-surface ${m.surface.toLowerCase()}">${m.surface}</span></span>
+    <span class="match-tournament">${sideLabel} · ${m.venue || "R16"}</span>
     <span class="match-round">${m.round}</span>
     ${badge}
   </div>
   <div class="match-players">${oddsSection}</div>
+  ${renderStarPicks(m)}
   ${statsRowHTML}
 </div>`;
   }
@@ -868,6 +1504,13 @@
     const shouldOpenSlip = openSlip ?? !fromYuki;
     selectedMatchId  = matchId;
     selectedPlayerId = playerId;
+    // Keep star lean only if it belongs to this team
+    if (selectedStarId) {
+      const match = MATCHES.find(m => m.id === matchId);
+      const team = match?.players.find(p => p.id === playerId);
+      const stillValid = teamStars(team).some(s => s.id === selectedStarId);
+      if (!stillValid) selectedStarId = null;
+    }
 
     if (!fromYuki) {
       removeSuggestionBanner();
@@ -888,6 +1531,10 @@
         void btn.offsetWidth;
         btn.classList.add("yuki-fill");
       }
+    });
+    document.querySelectorAll(".star-chip").forEach(chip => {
+      const on = chip.dataset.match === matchId && chip.dataset.star === selectedStarId;
+      chip.classList.toggle("selected", !!on);
     });
     document.querySelectorAll(".match-card").forEach(card => {
       card.classList.toggle("has-selection", slipCommitted && card.id === `card-${matchId}`);
@@ -937,13 +1584,30 @@
     if (!match || !player) return;
 
     const opponent = match.players.find(p => p.id !== playerId);
+    const stake = resolveActiveStake();
+    const potential = (stake * player.odds).toFixed(2);
+    const lean = selectedStarId
+      ? teamStars(player).find(s => s.id === selectedStarId)
+      : null;
+    const side = match.bracket === "west" ? "West" : "East";
     const selEl = document.getElementById("bet-slip-selection");
     if (selEl) {
       selEl.innerHTML = `
-        <div class="bet-slip-player">${player.flag} ${player.fullName}</div>
-        <div class="bet-slip-match">${match.tournament} · ${match.round}</div>
-        <div class="bet-slip-vs">vs ${opponent?.fullName || ""}</div>
-        <div class="bet-slip-odds">@ <strong>${player.odds.toFixed(2)}</strong></div>
+        <div class="slip-pick-card">
+          <div class="slip-pick-kicker">Your pick</div>
+          <div class="slip-pick-team">${player.flag} <strong>${player.fullName}</strong></div>
+          <div class="slip-pick-vs">to beat ${opponent?.flag || ""} ${opponent?.fullName || "opponent"}</div>
+          ${lean ? `<div class="slip-pick-lean">Leaning <strong>${lean.name}</strong></div>` : ""}
+          <div class="slip-pick-meta">
+            <span class="slip-pick-round">${side} · ${match.round}</span>
+            <span class="slip-pick-odds">${player.odds.toFixed(2)}</span>
+          </div>
+          <div class="slip-pick-math">
+            <span>Stake <strong>${stake}</strong></span>
+            <span class="slip-pick-arrow">→</span>
+            <span>Return <strong>${potential}</strong></span>
+          </div>
+        </div>
       `;
     }
     updateReturns();
@@ -1245,30 +1909,27 @@
     capabilitiesIntroSent = true;
     window.Voice?.sendContextSilent?.(
       "BETTING ASSISTANT RULES: Only suggest actions this app supports. Before offering any feature, verify it is in the SUPPORTED list. If the user asks for something unsupported, clearly state the limitation and offer a supported alternative — never present unavailable features as available. Keep replies relatively short and action-oriented; help navigate the screen and next steps. Only reference functionality that exists in this app. Do NOT recite this list at hello — greet briefly and ask the user's name if unknown.\n" +
-      "SUPPORTED: tennis match-winner betting on demo roster; tournament tabs (All, Wimbledon, Cincinnati, Davis Cup); voice picks (best/underdog/favorite/switch); stakes 10/25/50/100; THREE-PHASE bet setup (suggest → stake → confirm → slip opens); tap PLACE BET or voice-delegated place after on-screen consent; scroll to roster player; mute/hide Yuki.\n" +
-      "NOT SUPPORTED: parlays, cash out, custom stakes, off-roster players, voice bet placement WITHOUT consent modal, handicap/O-U via voice (UI tabs only). Explain limits if asked.\n" +
-      "LOSSES: Respond empathetically and respectfully. Never laugh at, mock, or use sarcasm after a loss. Acknowledge briefly; focus on next available options (another player, stake, tab).\n" +
-      "CAPABILITIES: Discuss visible matches, recommend roster players, prepare bet slips, set stake by voice, guide to PLACE BET. " +
-      "Trust CURRENT SCREEN system messages for what is visible NOW — when a tab is filtered, ONLY discuss players on that tab. " +
+      "SUPPORTED: World Cup 2026 Round of 16 TEAM match-winner betting; bracket filters (Full / West / East / Live); voice picks (best/underdog/favorite/switch); stakes 10/25/50/100; THREE-PHASE bet setup (suggest → stake → confirm → slip opens); tap PLACE BET or voice-delegated place after on-screen consent; scroll to roster team; mute/hide Yuki.\n" +
+      "NOT SUPPORTED: parlays, cash out, custom stakes, nations off the R16 roster, general chat / companionship off betting, registration/accounts, voice bet placement WITHOUT consent modal, O/U or BTTS via voice (UI tabs only). You are a BET HELPER only — never invite casual conversation.\n" +
+      "LOSSES: Respond empathetically and respectfully. Never laugh at, mock, or use sarcasm after a loss. Acknowledge briefly; focus on next available options (another team, stake, bracket side).\n" +
+      "CAPABILITIES: Discuss visible R16 matches, recommend roster TEAMS (you know their star players well — Messi, Mbappé, Vinícius, Kane, Bellingham, Yamal, Ronaldo, etc.), prepare bet slips, set stake by voice, guide to PLACE BET. " +
+      "Trust CURRENT SCREEN system messages for what is visible NOW — when a bracket filter is active, ONLY discuss teams on that filter. " +
       "BET SETUP WORKFLOW (3 phases — follow exactly):\n" +
-      "Phase 1 SUGGEST: You name a roster player → app highlights them. Bet slip stays HIDDEN. Ask stake only (10, 25, 50, 100).\n" +
+      "Phase 1 SUGGEST: You name a roster TEAM → app highlights them. Bet slip stays HIDDEN. Ask stake only (10, 25, 50, 100).\n" +
       "Phase 2 PREVIEW: User gives stake → preview banner shows name + stake. Slip still HIDDEN. Ask them to confirm (\"yes\", \"fill it\", or \"confirm and fill\").\n" +
       "Phase 3 FILL: Only after user confirms OR System says \"Bet slip filled\" → slip opens on screen. Tell them to tap PLACE BET.\n" +
       "Never say the slip is filled or open during Phase 1 or 2. Never ask for PLACE BET until Phase 3.\n" +
-      "When the user names a player not on screen, the app auto-switches tabs and scrolls to that player's match — then continue Phase 1 → 2 → 3. " +
-      "When you propose a different player (e.g. 'should we go with X instead' or 'switching to X'), the app tracks that player as the pending pick — if the user says yes/sure/ok, the app switches to THAT proposed player and continues the bet flow. " +
-      "Tennis knowledge: UNDERDOG = higher decimal odds and usually lower rank — never pick world #1 favorites (e.g. Sinner @ ~1.58) when the user asks for an underdog. FAVORITE = lower odds. Trust underdog_in_view / odds on screen. " +
-      "Never assume player, stake, tournament, or outcome. Ask short follow-up questions for anything missing. " +
-      "Before filling a slip, summarize player + stake once; state odds at most ONCE when first recommending a player. After the player is on screen or selected, never repeat odds, percentages, perf stats, or potential return — they are visible on the match card and bet slip. Confirmations = player name + stake only, no odds recap. When the user confirms or says fill, the APP fills the bet slip automatically — ONLY say it is filled after a System message containing 'Bet slip filled'. " +
-      "When the user states a stake amount, the app updates the slip preview — acknowledge the amount but do NOT claim the slip is filled until that System message arrives. " +
-      "If the user states a stake, preserve that exact amount. Available stakes: 10, 25, 50, 100. " +
-      "Adapt immediately if the user interrupts or changes topic. " +
-      "At session start: ONE greeting only — never chain a second opener (no \"just hanging out\", \"ready to dive\", \"browsing tennis matches\")."
+      "When the user names a team not on screen, the app may switch bracket filters and scroll — then continue Phase 1 → 2 → 3. " +
+      "Football knowledge: UNDERDOG = higher decimal odds / lower FIFA seed. FAVORITE = lower odds. You may cite star players when explaining a TEAM pick, but bets are always on the TEAM. " +
+      "Never assume team, stake, or outcome. Ask short follow-up questions for anything missing. " +
+      "Before filling a slip, summarize team + stake once; state odds at most ONCE when first recommending. After the team is on screen, never repeat odds. Confirmations = team name + stake only. When the user confirms, the APP fills the slip — ONLY say it is filled after a System message containing 'Bet slip filled'. " +
+      "Available stakes: 10, 25, 50, 100. " +
+      "At session start: follow YukiIntro three-act script when active; otherwise ONE short bet-focused greeting — never invite off-topic chat."
     );
   }
 
   function clearSelection({ resetSuggestions = false } = {}) {
-    selectedMatchId = selectedPlayerId = null;
+    selectedMatchId = selectedPlayerId = selectedStarId = null;
     yukiFlowState = "idle";
     yukiPendingMatch = yukiPendingPlayer = null;
     slipCommitted = false;
@@ -1277,6 +1938,7 @@
     clearOddsVoiced();
     removeSuggestionBanner();
     document.querySelectorAll(".player-odds-btn").forEach(b => b.classList.remove("selected", "yuki-suggested", "yuki-fill"));
+    document.querySelectorAll(".star-chip").forEach(c => c.classList.remove("selected"));
     document.querySelectorAll(".match-card").forEach(c => c.classList.remove("has-selection", "has-yuki-preview"));
     betSlipEl = betSlipEl || document.getElementById("bet-slip");
     if (betSlipEl) betSlipEl.classList.remove("open");
@@ -1311,6 +1973,10 @@
     const match = MATCHES.find(m => m.id === matchId);
     const player = match?.players.find(p => p.id === playerId);
     if (!match || !player) return false;
+    if (match.status === "final") {
+      showFlashMsg("That match is already finished", "lose");
+      return false;
+    }
 
     const stake = resolveActiveStake();
     const balance = window.Betting?.getBalance?.() ?? 0;
@@ -1320,6 +1986,7 @@
 
     window.Betting?.adjustBalance(-stake);
 
+    const opponent = match.players.find(p => p.id !== playerId);
     const winChance = 1 / player.odds;
     const won = Math.random() < winChance;
     const net = won
@@ -1336,17 +2003,69 @@
       stake,
     };
 
+    // Match winner drives the bracket. Winner market uses your bet; other markets sim the tie.
+    let matchWinner;
+    let matchLoser;
+    if (activeBetType === "winner") {
+      matchWinner = won ? player : opponent;
+      matchLoser = won ? opponent : player;
+    } else {
+      const fav = getMatchFavorite(match) || player;
+      matchWinner = Math.random() < 0.58 ? fav : (match.players.find(p => p.id !== fav.id) || opponent || player);
+      matchLoser = match.players.find(p => p.id !== matchWinner.id) || opponent;
+    }
+
+    const sc = generateScore(matchWinner, matchLoser);
+    const winnerIsP1 = match.players[0].id === matchWinner.id;
+    match.score = winnerIsP1 ? `${sc.w}-${sc.l}` : `${sc.l}-${sc.w}`;
+    match.status = "final";
+    match.winnerId = matchWinner.id;
+    match.loserId = matchLoser?.id || null;
+    match.time = null;
+    match.stats = null;
+
     if (won) {
       window.Betting?.adjustBalance(Math.round(stake * player.odds * 100) / 100);
-      showFlashMsg(`+${net.toFixed(0)} 🎾 ${player.fullName} wins!`, "win");
+      showFlashMsg(`+${net.toFixed(0)} ${player.flag} ${player.fullName} wins!`, "win");
       bus?.emit("sports:event", { type: "WIN", payload: { ...outcome, net } });
     } else {
-      showFlashMsg(`−${stake} ${player.fullName} lost 😔`, "lose");
+      showFlashMsg(`−${stake} ${player.flag} ${player.fullName} lost`, "lose");
       bus?.emit("sports:event", { type: "LOSE", payload: { ...outcome, chip: stake } });
     }
 
+    // Capture bracket source before DOM refresh so the flag can fly forward
+    const srcFlag = document.querySelector(
+      `#bracket-board .bt-flag[data-team="${matchWinner.id}"], #bracket-board .bt-flag.is-advanced[data-bt-team="${matchWinner.id}"]`
+    ) || document.querySelector(`#card-${match.id} .player-odds-btn[data-player="${matchWinner.id}"] .player-flag`);
+    const fromRect = srcFlag?.getBoundingClientRect?.() || null;
+
+    const slotKey = advanceWinner(match, matchWinner);
+
+    // Phone: open the Bracket section so the advance animation is visible
+    if (isPhoneLayout() && activeView !== "bracket") {
+      activeView = "bracket";
+      applySportsView();
+      renderViewTabs();
+    }
+
+    renderMatches();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => playBracketAdvance(fromRect, slotKey, matchWinner));
+    });
+
+    const progressed = matchWinner.fullName;
+    setTimeout(() => {
+      if (BRACKET.champion) {
+        showFlashMsg(`${BRACKET.champion.flag} ${BRACKET.champion.fullName} are World Champions!`, "win");
+        setTimeout(resetTournament, 3200);
+      } else {
+        showFlashMsg(`${progressed} advance · ${currentStageLabel()}`, "win");
+      }
+    }, 700);
+
     clearSelection({ resetSuggestions: true });
     yukiFlowState = "idle";
+    selectedStarId = null;
     return true;
   }
 
@@ -2090,30 +2809,38 @@
     return row[b.length];
   }
 
-  /** STT often mis-hears these roster names — map aliases to player ids. */
+  /** STT often mis-hears these roster names — map aliases to team ids. */
   const STT_PLAYER_ALIASES = (() => {
     const map = {};
     const overrides = {
-      tsitsipas: ["city pass", "cici pass", "tsiti pas", "sitsipas", "tsitsipa", "stefanos"],
-      deminaur: ["deminer", "de miner", "mina ur", "deminor", "minaur"],
-      djokovic: ["jokovic", "jo covich"],
-      alcaraz: ["alcaras", "alcarez"],
-      medvedev: ["medved", "medvedeff"],
-      shelton: ["sheltan", "shelten"],
-      musetti: ["museti", "mussetti"],
-      hurkacz: ["hur kacz", "hurkas"],
-      norrie: ["norry", "cam norrie"],
-      rublev: ["roob lev", "rublev"],
-      draper: ["drap er", "jack draper"],
-      tiafoe: ["tee af o", "tia foe", "frances", "francis", "francis tiafoe", "frances tiafoe"],
-      rune: ["holger"],
-      fritz: ["taylor"],
-      zverev: ["sascha", "alexander z"],
+      argentina: ["argentine", "messi's team", "albiceleste"],
+      mexico: ["méxico", "el tri"],
+      france: ["les bleus", "mbappe team", "mbappé's team"],
+      senegal: ["lions of teranga"],
+      brazil: ["brasil", "seleção", "selecao"],
+      japan: ["samurai blue"],
+      england: ["three lions", "englan"],
+      switzerland: ["swiss"],
+      spain: ["españa", "espana", "la roja"],
+      germany: ["deutschland", "die mannschaft"],
+      portugal: ["seleção das quinas", "ronaldo's team"],
+      uruguay: ["la celeste", "charruas"],
+      netherlands: ["holland", "oranje", "dutch"],
+      usa: ["united states", "usmnt", "america", "u s a", "u.s.a", "us mnt"],
+      morocco: ["atlas lions", "maroc"],
+      croatia: ["vatreni", "modric team", "modrić team"],
     };
     MATCHES.forEach(m => {
       m.players.forEach(p => {
-        const last = p.fullName.split(" ").pop().toLowerCase();
-        map[p.id] = [p.id, last, ...(overrides[p.id] || [])];
+        const names = [p.id, p.name.toLowerCase(), p.fullName.toLowerCase()];
+        (p.stars || []).forEach(star => {
+          const label = starName(star).toLowerCase();
+          if (!label) return;
+          const parts = label.split(/\s+/);
+          names.push(label);
+          if (parts.length) names.push(parts[parts.length - 1]);
+        });
+        map[p.id] = [...new Set([...names, ...(overrides[p.id] || [])])];
       });
     });
     return map;
@@ -2185,9 +2912,13 @@
           odds: p.odds,
           rank: p.rank,
           perf: Math.round(p.perf),
+          stars: teamStars(p).map(s => s.name),
         })),
       })),
       player_names: MATCHES.flatMap(m => m.players.map(p => p.fullName)),
+      star_players: MATCHES.flatMap(m =>
+        m.players.flatMap(p => teamStars(p).map(star => ({ team: p.fullName, name: star.name, perf: star.perf })))
+      ),
     };
   }
 
@@ -2265,7 +2996,7 @@
     sendBetFlowContext(
       "The player wants to bet. Ask what player or tournament they're interested in — short reply. Only explain your capabilities if they ask."
     );
-    askRouter("place_bet", "The player wants to place a tennis bet. Explain capabilities and ask what player and stake they want.");
+    askRouter("place_bet", "The player wants to place a World Cup bet. Ask which Round of 16 team and stake they want — stay on betting only.");
     yukiFlowState = "idle";
   }
 
@@ -2309,7 +3040,7 @@
       ? "Who is the best underdog bet on screen right now? Name one player clearly."
       : strategy === "favorite"
       ? "Who is the strongest favorite on screen? Name one player clearly."
-      : "Who is your best tennis pick on screen right now? Name one player clearly.";
+      : "Who is your best World Cup Round of 16 pick on screen right now? Name one TEAM clearly.";
 
     askRouter(
       strategy === "underdog" ? "underdog_pick" : strategy === "switch" ? "switch_player" : "best_pick",
@@ -2556,16 +3287,11 @@
     if (!slot || !card) return;
 
     const stake = userLockedStake ?? selectedChip;
-    const stakeHtml = userLockedStake
-      ? `Stake <strong>${userLockedStake}</strong> → <strong>${(userLockedStake * player.odds).toFixed(2)}</strong>`
-      : `<span class="suggest-stake missing">Pick stake: <em>10, 25, 50, or 100</em></span>`;
-    const label = suggested
-      ? (userLockedStake ? `Yuki suggests · ${userLockedStake} chips` : "Yuki suggests")
-      : "Confirm your bet";
     const canFill = !!(userLockedStake && VALID_STAKES.includes(userLockedStake));
-    const hint = canFill
-      ? "Say “yes, confirm and fill” to open the bet slip"
-      : "Set a stake first, then confirm to fill";
+    const potential = canFill ? (userLockedStake * player.odds).toFixed(2) : null;
+    const label = suggested
+      ? (canFill ? "Yuki’s pick — confirm?" : "Yuki’s pick")
+      : "Confirm this bet?";
 
     yukiFlowState = canFill ? "awaiting_confirm" : "awaiting_stake";
     card.classList.add("has-yuki-suggest");
@@ -2573,15 +3299,21 @@
     slot.hidden = false;
     slot.innerHTML = `
       <div class="yuki-suggest-banner" id="yuki-suggest-banner">
-        <span class="suggest-badge" aria-hidden="true">✦</span>
         <div class="suggest-body">
           <span class="suggest-label">${label}</span>
-          <span class="suggest-text"><strong>${player.fullName}</strong> @ ${player.odds.toFixed(2)}× · ${match.tournament}</span>
-          <span class="suggest-stake">${stakeHtml}</span>
-          <span class="suggest-hint">${hint}</span>
+          <div class="suggest-pick-line">
+            <span class="suggest-team">${player.flag} <strong>${player.fullName}</strong></span>
+            <span class="suggest-odds">${player.odds.toFixed(2)}</span>
+          </div>
+          <span class="suggest-vs">vs ${opponent?.flag || ""} ${opponent?.fullName || ""} · ${match.bracketLabel || match.round}</span>
+          ${canFill
+            ? `<span class="suggest-stake">Stake <strong>${userLockedStake}</strong> → return <strong>${potential}</strong></span>`
+            : `<span class="suggest-stake missing">Choose a stake: 10 · 25 · 50 · 100</span>`}
         </div>
         <div class="suggest-actions">
-          <button class="suggest-confirm" id="suggest-yes-btn" ${canFill ? "" : "disabled"}>${canFill ? "Confirm & fill slip" : "Set stake first"}</button>
+          <button class="suggest-confirm" id="suggest-yes-btn" ${canFill ? "" : "disabled"}>
+            ${canFill ? "Confirm" : "Set stake"}
+          </button>
           <button class="suggest-dismiss" id="suggest-no-btn" aria-label="Dismiss">✕</button>
         </div>
       </div>`;

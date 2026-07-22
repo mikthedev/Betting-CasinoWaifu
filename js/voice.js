@@ -651,6 +651,25 @@
       window.CharacterMemory.addTurn("user", text);
       const newName = window.CharacterMemory.getUserName?.();
       if (newName && newName !== prevName) syncUserNameToVoice();
+
+      const Intro = window.YukiIntro;
+      if (Intro?.shouldUseScript?.()) {
+        const phase = Intro.getPhase?.();
+        if ((phase === "awaiting_name" || phase === "act1") && newName) {
+          Intro.onNameCaptured?.();
+          sendContextSilent(`System hint: ${Intro.buildAct2Hint(newName)}`);
+        } else if (phase === "awaiting_day") {
+          if (Intro.shouldStepBack?.(text)) {
+            sendContextSilent(`System hint: ${Intro.buildStepBackHint()}`);
+            Intro.onStepBackDelivered?.();
+          } else {
+            sendContextSilent(`System hint: ${Intro.buildAct3Hint(text)}`);
+            Intro.onAct3Delivered?.();
+          }
+        } else if (phase === "awaiting_return") {
+          Intro.onAct3Delivered?.();
+        }
+      }
     }
 
     if (lastUserWantsDetail) {
@@ -695,7 +714,7 @@
     if (window.Sports?.shouldRepromptPickSpeech?.(clean)) {
       sendContextSilent(
         "System: You spoke internal reasoning aloud (thought/thinking). NEVER say thought, thinking, or narrate reasoning. " +
-        "Name ONE roster player immediately — e.g. \"How about Frances Tiafoe\" — full name only, under 15 words."
+        "Name ONE roster TEAM immediately — e.g. \"How about Argentina\" — under 15 words."
       );
       sendJson({ type: "response.create" });
       markAwaitingAgentResponse();
@@ -1213,9 +1232,22 @@
     syncUserNameToVoice();
     beginStartupGrace(90000);
 
-    const text = name
-      ? `Hey Yuki! Voice just connected on the tennis betting screen. Welcome ${name} back warmly — you're Yuki, their friendly betting companion. In 2 short sentences: say hi to ${name}, mention you're here to help with their bets, and ask what they'd like to play today. Keep it natural and upbeat. No feature lists.`
-      : "Hey Yuki! Voice just connected on the tennis betting screen. Give a great first greeting in 2–3 short sentences: (1) introduce yourself as Yuki, (2) say you're their companion here to help with tennis bets — finding picks, setting stakes, and filling the slip, (3) ask what you should call them. Warm, friendly, natural — like meeting a fun betting buddy. Do NOT list every feature or give a long speech. Do NOT add a follow-up line like \"just hanging out\" or \"ready to dive into matches\" — stop after the greeting and wait for them.";
+    const Intro = window.YukiIntro;
+    let text;
+    if (Intro) {
+      if (name || Intro.isReturningPlayer?.()) {
+        Intro.startReturning();
+        text = `System hint for opening: ${Intro.buildReturnOpeningHint(name || "friend")}`;
+      } else {
+        Intro.startNew();
+        text = `System hint for opening: ${Intro.buildAct1Hint()}`;
+      }
+      Intro.onOpeningDelivered?.();
+    } else {
+      text = name
+        ? `Hey Yuki! Voice connected on the World Cup 2026 betting screen. Welcome ${name} back — you're Yuki, their betting helper. In 2 short sentences: say hi to ${name}, say you're here to help with Round of 16 bets, ask what they'd like to bet on. No feature lists. No casual-chat invite.`
+        : "Hey Yuki! Voice connected on the World Cup 2026 Round of 16 screen. ONE short line only: ask their name warmly. Do NOT introduce yourself as Yuki yet. Do NOT list features.";
+    }
 
     sendJson({
       type: "conversation.item.create",

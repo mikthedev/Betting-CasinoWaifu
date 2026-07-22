@@ -17,6 +17,7 @@
   const sprites = (cfg.CHARACTER && cfg.CHARACTER.sprites) || {};
   const E = window.Character.EMOTION;
   const isCompanion = cfg.MODE === "companion";
+  const avatar3d = !!cfg.AVATAR_3D;
   const autoVoice = !isCompanion && cfg.AUTO_VOICE !== false;
 
   const ui = {};
@@ -36,10 +37,12 @@
   let talkingStartedAt = 0;
   let sentimentEmotionUntil = 0;
   let micGestureBound = false;
+  let greetGesturePlayed = false;
   const MIN_TALKING_MS = 800;
 
   function isMobileOverlay() {
-    return window.innerWidth <= 480;
+    // Floating Yuki on all non-desktop widths
+    return window.innerWidth < 1100;
   }
 
   function inGameReaction() { return Date.now() < reactionUntil; }
@@ -62,17 +65,26 @@
     ui.talk     = document.getElementById("btn-talk");
     ui.mute     = document.getElementById("btn-mute");
     ui.hide     = document.getElementById("btn-hide");
+    ui.restore  = document.getElementById("yuki-restore");
     ui.ring     = document.getElementById("listen-ring");
     ui.charWrap = document.getElementById("yuki-char-wrap");
-    ui.popup    = null; // no longer used (buttons are inline side elements)
+    ui.popup    = null;
 
     bindUI();
     wireEvents();
+    if (avatar3d) {
+      document.body.classList.add("yuki-avatar-3d-mode");
+      hide2dFallbackForever();
+      bootAvatar3D();
+    }
     bootVoice();
     setupMobileDrag();
   }
 
   function buildCompanion(mount) {
+    const charMarkup = avatar3d
+      ? `<img class="yuki-char yuki-char-fallback" id="yuki-char" src="${sprites.idle}" alt="" hidden />`
+      : `<img class="yuki-char" id="yuki-char" src="${sprites.idle}" alt="Yuki" />`;
     mount.innerHTML = `
       <div class="yuki-root companion" id="yuki-root" data-emotion="idle">
         <div class="yuki-stage">
@@ -81,7 +93,7 @@
             <div class="yuki-char-wrap" id="yuki-char-wrap">
               <div class="yuki-glow"></div>
               <div class="listen-ring" id="listen-ring"></div>
-              <img class="yuki-char" id="yuki-char" src="${sprites.idle}" alt="Yuki" />
+              ${charMarkup}
             </div>
           </div>
           <div class="yuki-controls">
@@ -93,28 +105,45 @@
   }
 
   function buildCasinoWidget(mount) {
+    const charMarkup = avatar3d
+      ? `<img class="yuki-char yuki-char-fallback" id="yuki-char" src="${sprites.idle}" alt="" draggable="false" hidden />`
+      : `<img class="yuki-char" id="yuki-char" src="${sprites.idle}" alt="Yuki" draggable="false" />`;
     mount.innerHTML = `
       <div class="yuki-root casino-widget" id="yuki-root" data-emotion="idle">
         <div class="yuki-stage">
-          <div class="yuki-toast" id="yuki-toast" role="status" aria-live="polite"></div>
-
-          <div class="yuki-row">
-            <!-- Mute button — left side -->
-            <button class="yuki-side-btn yuki-side-mute" id="btn-mute" aria-label="Mute Yuki">
-              <span class="pop-icon">🔊</span>
-            </button>
-
-            <button type="button" class="yuki-body yuki-char-wrap yuki-tap-target" id="yuki-char-wrap" title="Tap Yuki to talk">
-              <div class="yuki-glow"></div>
-              <div class="listen-ring" id="listen-ring"></div>
-              <img class="yuki-char" id="yuki-char" src="${sprites.idle}" alt="Yuki" draggable="false" />
-            </button>
-
-            <!-- Hide button — right side -->
-            <button class="yuki-side-btn yuki-side-hide" id="btn-hide" aria-label="Hide Yuki">
-              <span class="pop-icon">👁</span>
-            </button>
+          <div class="yuki-companion-panel" id="yuki-row">
+            <div class="yuki-toast" id="yuki-toast" role="status" aria-live="polite"></div>
+            <div class="yuki-companion-glow" aria-hidden="true"></div>
+            <div class="yuki-companion-toolbar">
+              <button type="button" class="yuki-companion-btn" id="btn-mute" aria-label="Mute Yuki">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M11 5L6 9H2v6h4l5 4V5z" fill="currentColor" stroke="none"/>
+                  <path class="icon-wave" d="M15.54 8.46a5 5 0 010 7.07"/>
+                  <path class="icon-slash" d="M17 7l4 4M21 7l-4 4"/>
+                </svg>
+              </button>
+              <button type="button" class="yuki-companion-btn" id="btn-hide" aria-label="Minimize Yuki">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
+            <div class="yuki-companion-frame">
+              <div class="yuki-companion-aurora" aria-hidden="true"></div>
+              <div class="yuki-companion-viewport">
+                <button type="button" class="yuki-char-wrap yuki-tap-target" id="yuki-char-wrap" title="Tap Yuki to talk">
+                  <div class="yuki-glow"></div>
+                  <div class="listen-ring" id="listen-ring"></div>
+                  ${charMarkup}
+                </button>
+              </div>
+            </div>
           </div>
+
+          <button class="yuki-restore-pill" id="yuki-restore" type="button" aria-label="Show Yuki" hidden>
+            <img class="yuki-restore-avatar" src="${sprites.idle}" alt="" />
+            <span class="yuki-restore-label">Yuki</span>
+          </button>
         </div>
       </div>`;
   }
@@ -125,72 +154,207 @@
 
     if (ui.mute) {
       ui.mute.addEventListener("click", e => {
-        e.stopPropagation(); // prevent bubbling to host drag/mini handler
+        e.stopPropagation();
         toggleMute();
       });
     }
 
     if (ui.hide) {
       ui.hide.addEventListener("click", e => {
-        e.stopPropagation(); // critical: prevents host click from immediately un-hiding
+        e.stopPropagation();
         toggleHide();
       });
     }
 
+    if (ui.restore) {
+      ui.restore.addEventListener("click", e => {
+        e.stopPropagation();
+        if (isHidden) toggleHide();
+      });
+    }
+
     if (ui.charWrap && !isCompanion) {
-      ui.charWrap.addEventListener("click", onCharTap);
+      ui.charWrap.addEventListener("click", (e) => {
+        // Drag end synthesizes a click — ignore those.
+        if (suppressCharTap || didDragThisGesture) {
+          e.preventDefault();
+          e.stopPropagation();
+          suppressCharTap = false;
+          didDragThisGesture = false;
+          return;
+        }
+        onCharTap();
+      });
     }
   }
 
-  // ── Mobile drag ──────────────────────────────────────────────────────────────
+  // ── Floating drag (phone + desktop — undocks from aside when moved) ──────────
+  let didDragThisGesture = false;
+  let suppressCharTap = false;
+
   function setupMobileDrag() {
     const host = document.querySelector(".yuki-widget-host");
     if (!host) return;
 
     let sx = 0, sy = 0, sl = 0, st = 0, dragging = false;
-    const THRESH = 6;
+    const THRESH = 8;
 
-    function toAbsolute() {
-      const r = host.getBoundingClientRect();
-      host.style.right  = "auto";
-      host.style.bottom = "auto";
-      host.style.left   = r.left + "px";
-      host.style.top    = r.top  + "px";
+    function visualEl() {
+      // Docked host is tall (height:100%, flex-end). Always measure the visible card.
+      return host.querySelector(".yuki-companion-panel") || host;
+    }
+
+    function undockForDrag() {
+      if (!host.classList.contains("yuki-docked")) return;
+      host.classList.remove("yuki-docked");
+      if (host.parentElement !== document.body) {
+        document.body.appendChild(host);
+      }
+      host.style.width = "";
+      host.style.height = "auto";
+      window.YukiLayout?.setFloated?.(true);
+    }
+
+    function pinHostAt(left, top) {
+      // Important beats dock/floating stylesheet right/bottom/left/top rules.
+      host.style.setProperty("position", "fixed", "important");
+      host.style.setProperty("z-index", "9999", "important");
+      host.style.setProperty("left", `${left}px`, "important");
+      host.style.setProperty("top", `${top}px`, "important");
+      host.style.setProperty("right", "auto", "important");
+      host.style.setProperty("bottom", "auto", "important");
+    }
+
+    function lockFloatedSize(panel, width, height) {
+      // Keep the exact docked (or current) pixel size while floating — no shrink/grow.
+      const w = Math.round(width);
+      const h = Math.round(height);
+      host.style.setProperty("width", `${w}px`, "important");
+      host.style.setProperty("height", "auto", "important");
+      host.style.setProperty("max-width", "none", "important");
+      if (panel && panel !== host) {
+        panel.style.setProperty("width", `${w}px`, "important");
+        panel.style.setProperty("height", `${h}px`, "important");
+        panel.style.setProperty("aspect-ratio", "auto", "important");
+        panel.style.setProperty("max-width", "none", "important");
+        panel.style.setProperty("margin-top", "0", "important");
+      }
+    }
+
+    function beginDrag(clientX, clientY) {
+      // CRITICAL: use the panel box, not the host. While docked the host fills the
+      // aside; pinning host.top would teleport Yuki to the top of that column.
+      const panel = visualEl();
+      const visual = panel.getBoundingClientRect();
+      const targetLeft = visual.left;
+      const targetTop = visual.top;
+      const lockW = visual.width;
+      const lockH = visual.height;
+
+      undockForDrag();
+      lockFloatedSize(panel, lockW, lockH);
+      pinHostAt(targetLeft, targetTop);
+
+      // One correction pass after layout settles.
+      const after = host.getBoundingClientRect();
+      if (Math.abs(after.left - targetLeft) > 0.5 || Math.abs(after.top - targetTop) > 0.5) {
+        pinHostAt(targetLeft, targetTop);
+      }
+
+      sl = targetLeft;
+      st = targetTop;
+      sx = clientX;
+      sy = clientY;
+
+      host.classList.add("is-dragging");
+      dragging = true;
+      didDragThisGesture = true;
+      suppressCharTap = true;
+    }
+
+    function onPointerDown(clientX, clientY, target) {
+      if (target?.closest?.(".yuki-companion-btn, .yuki-restore-pill, #btn-mute, #btn-hide")) {
+        return false;
+      }
+      sx = clientX;
+      sy = clientY;
+      const r = visualEl().getBoundingClientRect();
+      sl = r.left;
+      st = r.top;
+      dragging = false;
+      didDragThisGesture = false;
+      return true;
+    }
+
+    function onPointerMove(clientX, clientY, e) {
+      if (!dragging) {
+        const dx = clientX - sx;
+        const dy = clientY - sy;
+        if (Math.abs(dx) <= THRESH && Math.abs(dy) <= THRESH) return;
+        beginDrag(clientX, clientY);
+        e?.preventDefault?.();
+        return;
+      }
+
+      e?.preventDefault?.();
+      const dx = clientX - sx;
+      const dy = clientY - sy;
+      const maxL = Math.max(0, window.innerWidth - host.offsetWidth);
+      const maxT = Math.max(0, window.innerHeight - host.offsetHeight);
+      pinHostAt(
+        Math.max(0, Math.min(maxL, sl + dx)),
+        Math.max(0, Math.min(maxT, st + dy))
+      );
+    }
+
+    function onPointerUp() {
+      if (didDragThisGesture) {
+        // Swallow the click that browsers fire after a drag.
+        suppressCharTap = true;
+        setTimeout(() => {
+          suppressCharTap = false;
+          didDragThisGesture = false;
+        }, 80);
+      }
+      dragging = false;
+      host.classList.remove("is-dragging");
     }
 
     host.addEventListener("touchstart", e => {
-      if (!isMobileOverlay()) return;
       const t = e.touches[0];
-      sx = t.clientX; sy = t.clientY;
-      const r = host.getBoundingClientRect();
-      sl = r.left; st = r.top;
-      dragging = false;
+      onPointerDown(t.clientX, t.clientY, e.target);
     }, { passive: true });
 
     host.addEventListener("touchmove", e => {
-      if (!isMobileOverlay()) return;
       const t = e.touches[0];
-      const dx = t.clientX - sx;
-      const dy = t.clientY - sy;
-
-      if (!dragging && (Math.abs(dx) > THRESH || Math.abs(dy) > THRESH)) {
-        dragging = true;
-        toAbsolute();
-      }
-
-      if (!dragging) return;
-      e.preventDefault();
-
-      const maxL = window.innerWidth  - host.offsetWidth;
-      const maxT = window.innerHeight - host.offsetHeight;
-      host.style.left = Math.max(0, Math.min(maxL, sl + dx)) + "px";
-      host.style.top  = Math.max(0, Math.min(maxT, st + dy)) + "px";
+      onPointerMove(t.clientX, t.clientY, e);
     }, { passive: false });
 
-    host.addEventListener("touchend", () => { dragging = false; });
+    host.addEventListener("touchend", onPointerUp);
+    host.addEventListener("touchcancel", onPointerUp);
 
-    // Tap on mini-badge restores Yuki (only direct tap on host, not bubbled)
+    host.addEventListener("pointerdown", e => {
+      if (e.pointerType === "touch") return;
+      if (!onPointerDown(e.clientX, e.clientY, e.target)) return;
+      try {
+        host.setPointerCapture?.(e.pointerId);
+      } catch (_) {}
+      const move = ev => onPointerMove(ev.clientX, ev.clientY, ev);
+      const up = () => {
+        onPointerUp();
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    });
+
     host.addEventListener("click", e => {
+      if (host.classList.contains("yuki-mini") && e.target.closest(".yuki-restore-pill")) {
+        return;
+      }
       if (e.target === host && host.classList.contains("yuki-mini")) {
         toggleHide();
       }
@@ -263,7 +427,7 @@
         if (!isHidden && !inGameReaction()) setEmotion(E.LISTENING);
       } else if (result.needsGesture) {
         bindMicOnFirstGesture();
-        if (ui.charWrap) ui.charWrap.title = "Tap anywhere to talk with Yuki";
+        if (ui.charWrap) ui.charWrap.title = "Tap Yuki to talk";
         if (!isHidden && !inGameReaction()) setEmotion(E.HAPPY);
       } else if (ui.charWrap) {
         ui.charWrap.title = "Talking with Yuki";
@@ -279,36 +443,34 @@
   function bindMicOnFirstGesture() {
     if (micGestureBound || userMuted) return;
     micGestureBound = true;
-    const finish = async () => {
-      if (micEnabled || userMuted) return;
-      connecting = true;
-      try {
-        await window.Voice.unlockAudio();
-        await window.Voice.startSession();
-        micEnabled = true;
-        voiceActive = true;
-        if (ui.charWrap) ui.charWrap.title = "Talking with Yuki";
-        if (!isHidden && !inGameReaction()) setEmotion(E.LISTENING);
-      } catch (err) {
-        console.warn("[Widget] mic gesture start failed:", err);
-      } finally {
-        connecting = false;
-      }
-    };
-    document.addEventListener("pointerdown", finish, { once: true, passive: true });
+    // Mic unlock must come from a real click on Yuki — not drag / random pointerdown.
+    if (ui.charWrap) ui.charWrap.title = "Tap Yuki to talk";
   }
 
-  // ── Character tap ─────────────────────────────────────────────────────────────
+  // ── Character tap (click only — not after a drag) ─────────────────────────────
   async function onCharTap() {
-    // Voice activation
+    if (suppressCharTap || didDragThisGesture) {
+      suppressCharTap = false;
+      didDragThisGesture = false;
+      return;
+    }
+    // Voice activation — click/tap on Yuki only
     if (isHidden || userMuted || connecting) return;
     connecting = true;
     setEmotion(E.LISTENING);
     try {
       await window.Voice.ensureRuntimeConfig();
-      await window.Voice.startSession();
-      micEnabled  = true;
+      await window.Voice.unlockAudio?.();
+      if (!window.Voice.isConnected?.()) {
+        await window.Voice.startSession();
+      }
+      const micOk = await window.Voice.requestMic?.();
+      if (micOk !== false) {
+        await window.Voice.attachMicCapture?.();
+        micEnabled = true;
+      }
       voiceActive = true;
+      document.body.classList.add("voice-live");
       if (ui.charWrap) ui.charWrap.title = "Talking with Yuki";
     } catch (err) {
       console.warn("[Widget] char tap voice failed:", err);
@@ -348,7 +510,7 @@
         ui.mute.textContent = muted ? "🔇 Muted" : "🔊 Mute";
         ui.mute.classList.toggle("is-muted", muted);
       }
-      return;  // companion uses plain textContent (no .pop-icon spans)
+      return;
     }
 
     userMuted = !userMuted;
@@ -359,19 +521,11 @@
       voiceActive = false;
       micEnabled  = false;
       document.body.classList.remove("voice-live");
-      if (ui.mute) {
-        const icon = ui.mute.querySelector(".pop-icon");
-        if (icon) icon.textContent = "🔇";
-        ui.mute.classList.add("is-muted");
-      }
+      ui.mute?.classList.add("is-muted");
       setEmotion(E.IDLE);
       if (isHidden) toast("Yuki paused", "info", 2500);
     } else {
-      if (ui.mute) {
-        const icon = ui.mute.querySelector(".pop-icon");
-        if (icon) icon.textContent = "🔊";
-        ui.mute.classList.remove("is-muted");
-      }
+      ui.mute?.classList.remove("is-muted");
       reconnectAttempt = 0;
       initCasinoVoice().then(async () => {
         if (!micEnabled) {
@@ -397,22 +551,22 @@
       ui.root.classList.remove("yuki-pop");
       ui.root.classList.add("yuki-hidden");
       if (bar) bar.classList.add("is-collapsed");
-      if (host && isMobileOverlay()) host.classList.add("yuki-mini");
-      if (ui.hide) {
-        const icon = ui.hide.querySelector(".pop-icon");
-        if (icon) icon.textContent = "✦";
-        ui.hide.classList.add("is-hidden-mode");
+      if (host) host.classList.add("yuki-mini");
+      ui.hide?.classList.add("is-hidden-mode");
+      if (ui.restore) {
+        ui.restore.hidden = false;
+        ui.restore.classList.add("is-visible");
       }
       startTalkPrompt();
     } else {
       isHidden = false;
       ui.root.classList.remove("yuki-hidden");
       if (bar) bar.classList.remove("is-collapsed");
-      if (host && isMobileOverlay()) host.classList.remove("yuki-mini");
-      if (ui.hide) {
-        const icon = ui.hide.querySelector(".pop-icon");
-        if (icon) icon.textContent = "👁";
-        ui.hide.classList.remove("is-hidden-mode");
+      if (host) host.classList.remove("yuki-mini");
+      ui.hide?.classList.remove("is-hidden-mode");
+      if (ui.restore) {
+        ui.restore.hidden = true;
+        ui.restore.classList.remove("is-visible");
       }
       stopTalkPrompt();
       clearToast();
@@ -621,15 +775,18 @@
     });
     bus.on("voice:listening:start", () => {
       ui.root.classList.add("listening");
-      if (!inGameReaction()) setEmotion(vibeListeningEmotion(userVibe));
+      if (!inGameReaction()) setEmotion(avatar3d ? E.LISTENING : vibeListeningEmotion(userVibe));
+      syncAvatar();
     });
     bus.on("voice:listening:stop", () => {
       ui.root.classList.remove("listening");
       if (ui.ring) ui.ring.style.setProperty("--lvl", 0);
       if (!inGameReaction() && !ui.root.classList.contains("speaking")) restoreVoiceEmotion();
+      syncAvatar();
     });
     bus.on("voice:thinking:start", () => {
       if (!inGameReaction()) setEmotion(E.THINKING);
+      syncAvatar();
     });
     bus.on("voice:level", ({ level }) => {
       if (ui.ring) ui.ring.style.setProperty("--lvl", level.toFixed(3));
@@ -637,10 +794,17 @@
     bus.on("voice:speaking:start", () => {
       talkingStartedAt = Date.now();
       ui.root.classList.add("speaking");
+      setAvatarSpeaking(true);
+      if (avatar3d && !greetGesturePlayed && window.YukiAvatar3D) {
+        greetGesturePlayed = true;
+        window.YukiAvatar3D?.playGesture?.("hello");
+      }
       if (!inGameReaction()) setEmotion(E.TALKING);
+      syncAvatar();
     });
     bus.on("voice:speaking:stop", () => {
       ui.root.classList.remove("speaking");
+      setAvatarSpeaking(false);
       if (inGameReaction()) return;
       if (Date.now() < sentimentEmotionUntil) return;
       const sinceStart = Date.now() - talkingStartedAt;
@@ -648,9 +812,11 @@
       if (remaining > 0) {
         setTimeout(() => {
           if (!inGameReaction() && Date.now() >= sentimentEmotionUntil) restoreVoiceEmotion();
+          syncAvatar();
         }, remaining);
       } else {
         restoreVoiceEmotion();
+        syncAvatar();
       }
     });
 
@@ -784,12 +950,88 @@
   function startCompanionIdle() { startIdleCheckIns(); }
   function startBettingIdle()   { startIdleCheckIns(); }
 
+  // ── 3D avatar ────────────────────────────────────────────────────────────────
+  function hide2dFallbackForever() {
+    if (!avatar3d) return;
+    document.body.classList.add("yuki-avatar-3d-mode");
+    if (ui.char) {
+      ui.char.hidden = true;
+      ui.char.setAttribute("hidden", "");
+      ui.char.removeAttribute("src");
+      ui.char.alt = "";
+    }
+  }
+
+  function getAvatarModelUrl() {
+    const a = cfg.AVATAR_3D;
+    if (!a) return "assets/vrm/yuki_street.vrm";
+    if (typeof a === "string") return a;
+    return a.modelUrl || a.skins?.[0]?.url || "assets/vrm/yuki_street.vrm";
+  }
+
+  function bootAvatar3D() {
+    if (!avatar3d || !ui.charWrap) return;
+    if (ui.charWrap.classList.contains("yuki-avatar-3d-loading")) return;
+    ui.charWrap.classList.add("yuki-avatar-3d-loading");
+    const modelUrl = getAvatarModelUrl();
+    const framing = "compact";
+    import(`/js/yuki-avatar-3d.js?v=3`)
+      .then(({ mountYukiAvatar3D }) => mountYukiAvatar3D(ui.charWrap, { modelUrl, framing }))
+      .then((avatar) => {
+        window.YukiAvatar3D = avatar;
+        document.body.classList.add("yuki-avatar-3d-ready");
+        ui.charWrap.classList.remove("yuki-avatar-3d-loading");
+        hide2dFallbackForever();
+        syncAvatar();
+      })
+      .catch((err) => {
+        console.warn("[YukiAvatar3D] mount failed — keeping 2D fallback:", err);
+        ui.charWrap.classList.remove("yuki-avatar-3d-loading");
+        if (ui.char) {
+          ui.char.hidden = false;
+          ui.char.removeAttribute("hidden");
+          ui.char.src = sprites.idle;
+          ui.char.alt = "Yuki";
+        }
+        document.body.classList.remove("yuki-avatar-3d-mode");
+      });
+  }
+
+  function setAvatarSpeaking(on) {
+    if (!avatar3d) return;
+    window.YukiAvatar3D?.setSpeaking?.(on);
+  }
+
+  function setAvatarMood(mood) {
+    if (!avatar3d) return;
+    window.YukiAvatar3D?.setMood?.(mood);
+  }
+
+  function syncAvatar() {
+    if (!avatar3d || !window.YukiAvatar3D) return;
+    let mode = "idle";
+    const audioPlaying = window.Voice?.isAgentAudioPlaying?.();
+    if (ui.root?.classList.contains("speaking") || audioPlaying) mode = "speaking";
+    else if (ui.root?.classList.contains("listening")) mode = "listening";
+    else if (ui.root?.dataset?.emotion === "thinking") mode = "thinking";
+    window.YukiAvatar3D.setMode?.(mode);
+  }
+
   // ── Emotion / toast / effects ─────────────────────────────────────────────────
   function setEmotion(emotion) {
     if (!sprites[emotion]) emotion = E.IDLE;
-    if (ui.char) ui.char.src = sprites[emotion];
+    if (ui.char && !avatar3d) ui.char.src = sprites[emotion];
     ui.root.dataset.emotion = emotion;
     returnEmotion = emotion;
+
+    if (avatar3d) {
+      const moodMap = {
+        happy: "happy", excited: "excited", sad: "sad", worried: "worried",
+        idle: "neutral", listening: null, thinking: null, talking: null,
+      };
+      if (moodMap[emotion]) setAvatarMood(moodMap[emotion]);
+      syncAvatar();
+    }
   }
 
   function toast(text, kind = "info", ms = 3500) {

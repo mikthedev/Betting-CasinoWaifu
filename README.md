@@ -1,6 +1,8 @@
 # Betting CasinoWaifu
 
-Voice-guided **tennis betting** with **Yuki**, an anime AI companion powered by **Inworld Realtime** voice. Plain HTML, CSS, and JavaScript — no React, no build step.
+Voice-guided **World Cup 2026** betting with **Yuki**, a 3D anime AI helper powered by **Inworld Realtime** voice. Plain HTML, CSS, and JavaScript — no React, no build step.
+
+Yuki is **only** here to help you place bets — not a general chat companion. No registration.
 
 ```
 npm install
@@ -12,10 +14,12 @@ npm start              # http://localhost:8787
 
 ## What you get
 
-- Tennis match betting (Wimbledon, Cincinnati, Davis Cup) with live odds drift
-- **Voice betting** — ask Yuki for picks, name a player, confirm slips by voice
-- Yuki widget with mute/hide controls and emotional reactions to wins and losses
-- Inworld Realtime speech-to-speech (no browser TTS)
+- **World Cup 2026 Round of 16** bracket UI (West / East) with big-name teams and star players
+- Match Winner, Over/Under 2.5, and BTTS markets
+- **Desktop + phone** layouts — phone frame on mobile; three-column desktop with Yuki panel
+- **3D Yuki** (VRM) with mute/hide controls styled to match her frame
+- **Three-act intro** (name → identity as bet helper → invite a pick) — stays on betting
+- Voice betting — ask Yuki for picks, name a team, confirm slips by voice
 
 ---
 
@@ -47,9 +51,8 @@ Open **http://localhost:8787** (must use the Node server — not `file://`).
 
 | Say to Yuki | What happens |
 |-------------|--------------|
-| "I want to bet on tennis" | Yuki guides you through matches |
-| "Who's the best pick?" | Yuki recommends a player and offers to fill the slip |
-| "Bet on Alcaraz" | Yuki selects that player |
+| "Who's the best pick?" | Yuki recommends a team and offers to fill the slip |
+| "Bet on Argentina" | Yuki selects that team |
 | "Yes, fill it" | Yuki autofills the bet slip — tap **PLACE BET** to confirm |
 
 Tap Yuki to connect voice. Allow microphone when prompted.
@@ -63,50 +66,14 @@ npm run test:greeting   # should print SUCCESS
 ## Architecture
 
 ```
-sports.js  ──▶  EventBus  ──▶  widget.js  ──▶  character.js
+sports.js  ──▶  EventBus  ──▶  widget.js (+ 3D avatar)  ──▶  character.js
      │              │
      │              └──▶  router.js  ──▶  /api/chat/completions  ──▶  Inworld Router
      │                        (inworld/yuki-for-betting)
      └──▶  voice.js  ──▶  server/index.js  ──▶  Inworld Realtime
 ```
 
-| Path | Role |
-|------|------|
-| `lib/inworld-router.mjs` | Server-side Router chat completions (Basic auth) |
-| `api/chat/completions.js` | Vercel/local proxy — streams SSE to browser |
-| `js/router.js` | Client streaming chat + betting metadata |
-| `js/sports.js` | Tennis betting + voice/router intent handlers |
-| `js/voice.js` | Realtime voice (uses same router model in session) |
-
-### Inworld Router
-
-Yuki's betting personality lives in the Inworld Router (`inworld/yuki-for-betting`). The API key is never sent to the browser.
-
-```bash
-# .env
-INWORLD_API_KEY=your_base64_key_here
-INWORLD_ROUTER_MODEL=inworld/yuki-for-betting
-```
-
-Test the router:
-
-```bash
-npm run test:router
-```
-
-Client usage:
-
-```javascript
-await Router.chat(
-  [{ role: "user", content: "Who should I bet on?" }],
-  {
-    metadata: Router.buildBettingMetadata({ intent: "best_pick" }),
-    onDelta: ({ content }) => console.log(content),
-  }
-);
-```
-
-Betting intents pass `extra_body.metadata` (balance, flow_state, player, odds, tournament) for conditional routing in your Inworld router config.
+3D avatar deps are copied to `/vendor` via `scripts/sync-vendor.mjs` (runs on `postinstall` and Vercel build).
 
 ---
 

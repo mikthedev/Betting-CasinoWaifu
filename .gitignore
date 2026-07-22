@@ -1,6 +1,12 @@
 # dependencies
 node_modules/
 
+# regenerated from node_modules via scripts/sync-vendor.mjs
+vendor/
+
+# local GitHub design reference clone
+.ref-tmp/
+
 # Next.js
 .next/
 out/

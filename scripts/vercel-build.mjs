@@ -1,12 +1,21 @@
 /**
- * Vercel build — set voice mode (WebRTC on Vercel, no Railway required).
+ * Vercel build — sync vendor + set voice mode (WebRTC on Vercel, no Railway required).
  */
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { spawnSync } from "child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
+
+const sync = spawnSync(process.execPath, [path.join(__dirname, "sync-vendor.mjs")], {
+  cwd: root,
+  stdio: "inherit",
+});
+if (sync.status !== 0) {
+  console.warn("vendor sync failed — 3D avatar may not load on this deploy");
+}
 
 const hasInworldKey = !!(process.env.INWORLD_API_KEY || "").trim();
 const backend = process.env.VOICE_BACKEND_URL?.trim().replace(/\/$/, "") || null;

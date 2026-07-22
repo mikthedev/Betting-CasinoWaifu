@@ -53,7 +53,7 @@ window.YUKI_CONFIG = {
   },
 
   // ---------------------------------------------------------------------------
-  // Character sprites — keyed by interaction emotion (matches asset filenames)
+  // Character sprites — 2D fallback if WebGL/3D fails
   // ---------------------------------------------------------------------------
   CHARACTER: {
     name: "Yuki",
@@ -69,7 +69,19 @@ window.YUKI_CONFIG = {
     },
   },
 
-  // Yuki overlay on the tennis betting screen
+  // 3D VRM avatar (CasinoWaifu street look)
+  AVATAR_3D: {
+    modelUrl: "assets/vrm/yuki_street.vrm",
+    skins: [
+      {
+        id: "street",
+        label: "Yuki",
+        url: "assets/vrm/yuki_street.vrm",
+      },
+    ],
+  },
+
+  // Yuki overlay — bet helper only (not a general chat companion)
   MODE: "overlay",
   AUTO_VOICE: true,
 };

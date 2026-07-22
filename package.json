@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/sync-vendor.mjs",
     "prestart": "node scripts/ensure-recorder.mjs",
     "start": "node server/index.js",
     "predev": "node scripts/ensure-recorder.mjs",
@@ -16,7 +17,9 @@
     "test:router": "node scripts/test-router.mjs"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "^3.3.4",
     "dotenv": "^16.4.7",
+    "three": "^0.169.0",
     "ws": "^8.18.0"
   }
 }

@@ -1,5 +1,5 @@
 /**
- * eventBus.js — pub/sub between tennis betting and Yuki companion
+ * eventBus.js — pub/sub between World Cup betting and Yuki companion
  *
  * Contract:
  *   sports.js  -> emits  "sports:event"  { type: WIN | LOSE, payload }

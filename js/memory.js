@@ -41,14 +41,11 @@
     },
   });
 
-  // Topics Yuki actively listens for so she can steer chit-chat naturally.
+  // Topics Yuki listens for — keep bet-focused (not general chat steering).
   const TOPIC_KEYWORDS = {
-    games: ["game", "gaming", "play", "bet", "tennis", "wimbledon", "odds"],
-    anime: ["anime", "manga", "waifu", "otaku", "naruto", "onepiece", "ghibli"],
-    music: ["music", "song", "playlist", "band", "kpop", "lofi", "listen"],
-    movies: ["movie", "film", "cinema", "netflix", "show", "series"],
-    hobbies: ["hobby", "draw", "paint", "code", "cook", "gym", "read"],
-    "daily life": ["work", "school", "tired", "today", "weekend", "coffee", "sleep"],
+    betting: ["bet", "odds", "stake", "slip", "pick", "underdog", "favorite"],
+    football: ["world cup", "fifa", "bracket", "football", "soccer", "goal", "match"],
+    teams: ["argentina", "france", "brazil", "england", "spain", "germany", "portugal", "usa"],
   };
 
   let state = load();
@@ -132,15 +129,17 @@
   }
 
   const ROSTER_FIRST_NAMES = new Set([
-    "carlos", "novak", "jannik", "alexander", "taylor", "daniil", "holger", "ben",
-    "stefanos", "alex", "andrey", "jack", "frances", "lorenzo", "alexander", "tomas",
-    "casper", "hubert", "sinner", "zverev", "fritz", "medvedev", "rune", "shelton",
-    "tsitsipas", "deminaur", "rublev", "draper", "tiafoe", "musetti", "machac", "hurkacz",
+    "argentina", "mexico", "france", "senegal", "brazil", "japan", "england", "switzerland",
+    "spain", "germany", "portugal", "uruguay", "netherlands", "usa", "morocco", "croatia",
+    "lionel", "messi", "kylian", "mbappe", "mbappé", "vinicius", "vinícius", "harry", "kane",
+    "jude", "bellingham", "lamine", "yamal", "cristiano", "ronaldo", "christian", "pulisic",
+    "luka", "modric", "modrić", "julian", "julián", "enzo", "rodrygo", "endrick", "bukayo",
+    "saka", "pedri", "jamal", "musiala", "florian", "wirtz", "bruno", "fernandes", "virgil",
   ]);
 
   const COMMON_NON_NAMES = new Set([
     "yes", "no", "ok", "okay", "sure", "yep", "yeah", "nope", "thanks", "thank", "hi", "hey",
-    "hello", "please", "bet", "tennis", "wimbledon", "fill", "place", "confirm",
+    "hello", "please", "bet", "football", "soccer", "fill", "place", "confirm", "west", "east",
   ]);
 
   function isLikelyPersonName(name) {
@@ -158,7 +157,7 @@
 
     const turns = state.turns.slice(-4);
     const yukiAskedName = turns.some(turn =>
-      turn.role === "yuki" && /\b(your name|what should i call|call you|who am i speaking|introduce yourself)\b/i.test(turn.text)
+      turn.role === "yuki" && /\b(your name|what'?s your name|what should i call|call you|who am i speaking)\b/i.test(turn.text)
     );
     if (!yukiAskedName) return null;
 
