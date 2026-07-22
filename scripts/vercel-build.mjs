@@ -14,7 +14,8 @@ const sync = spawnSync(process.execPath, [path.join(__dirname, "sync-vendor.mjs"
   stdio: "inherit",
 });
 if (sync.status !== 0) {
-  console.warn("vendor sync failed — 3D avatar may not load on this deploy");
+  console.error("vendor sync failed — refusing deploy without three.js / three-vrm (3D Yuki would be 2D)");
+  process.exit(1);
 }
 
 const hasInworldKey = !!(process.env.INWORLD_API_KEY || "").trim();
