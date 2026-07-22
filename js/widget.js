@@ -169,6 +169,13 @@
     if (ui.restore) {
       ui.restore.addEventListener("click", e => {
         e.stopPropagation();
+        // Drag end fires a click — only restore on a real tap.
+        if (suppressCharTap || didDragThisGesture) {
+          e.preventDefault();
+          suppressCharTap = false;
+          didDragThisGesture = false;
+          return;
+        }
         if (isHidden) toggleHide();
       });
     }
@@ -192,6 +199,32 @@
   let didDragThisGesture = false;
   let suppressCharTap = false;
 
+  function clearYukiSizeLocks(host) {
+    if (!host) return;
+    host.style.removeProperty("width");
+    host.style.removeProperty("height");
+    host.style.removeProperty("max-width");
+    const panel = host.querySelector(".yuki-companion-panel");
+    if (panel) {
+      panel.style.removeProperty("width");
+      panel.style.removeProperty("height");
+      panel.style.removeProperty("aspect-ratio");
+      panel.style.removeProperty("max-width");
+      panel.style.removeProperty("margin-top");
+      panel.style.removeProperty("margin-bottom");
+    }
+  }
+
+  function pinYukiHost(host, left, top) {
+    if (!host) return;
+    host.style.setProperty("position", "fixed", "important");
+    host.style.setProperty("z-index", "9999", "important");
+    host.style.setProperty("left", `${left}px`, "important");
+    host.style.setProperty("top", `${top}px`, "important");
+    host.style.setProperty("right", "auto", "important");
+    host.style.setProperty("bottom", "auto", "important");
+  }
+
   function setupMobileDrag() {
     const host = document.querySelector(".yuki-widget-host");
     if (!host) return;
@@ -199,8 +232,13 @@
     let sx = 0, sy = 0, sl = 0, st = 0, dragging = false;
     const THRESH = 8;
 
+    function isMini() {
+      return host.classList.contains("yuki-mini");
+    }
+
     function visualEl() {
-      // Docked host is tall (height:100%, flex-end). Always measure the visible card.
+      // Mini: drag the restore pill. Docked: measure the panel, not the tall host.
+      if (isMini()) return host.querySelector(".yuki-restore-pill") || host;
       return host.querySelector(".yuki-companion-panel") || host;
     }
 
@@ -216,46 +254,48 @@
     }
 
     function pinHostAt(left, top) {
-      // Important beats dock/floating stylesheet right/bottom/left/top rules.
-      host.style.setProperty("position", "fixed", "important");
-      host.style.setProperty("z-index", "9999", "important");
-      host.style.setProperty("left", `${left}px`, "important");
-      host.style.setProperty("top", `${top}px`, "important");
-      host.style.setProperty("right", "auto", "important");
-      host.style.setProperty("bottom", "auto", "important");
+      pinYukiHost(host, left, top);
     }
 
-    function lockFloatedSize(panel, width, height) {
-      // Keep the exact docked (or current) pixel size while floating — no shrink/grow.
+    function lockFloatedSize(el, width, height) {
       const w = Math.round(width);
       const h = Math.round(height);
       host.style.setProperty("width", `${w}px`, "important");
       host.style.setProperty("height", "auto", "important");
       host.style.setProperty("max-width", "none", "important");
-      if (panel && panel !== host) {
-        panel.style.setProperty("width", `${w}px`, "important");
-        panel.style.setProperty("height", `${h}px`, "important");
-        panel.style.setProperty("aspect-ratio", "auto", "important");
-        panel.style.setProperty("max-width", "none", "important");
-        panel.style.setProperty("margin-top", "0", "important");
+      // Only lock the companion panel when she's visible — never while minimized.
+      if (!isMini() && el && el.classList?.contains("yuki-companion-panel")) {
+        el.style.setProperty("width", `${w}px`, "important");
+        el.style.setProperty("height", `${h}px`, "important");
+        el.style.setProperty("aspect-ratio", "auto", "important");
+        el.style.setProperty("max-width", "none", "important");
+        el.style.setProperty("margin-top", "0", "important");
       }
     }
 
     function beginDrag(clientX, clientY) {
-      // CRITICAL: use the panel box, not the host. While docked the host fills the
-      // aside; pinning host.top would teleport Yuki to the top of that column.
-      const panel = visualEl();
-      const visual = panel.getBoundingClientRect();
+      const visualNode = visualEl();
+      const visual = visualNode.getBoundingClientRect();
       const targetLeft = visual.left;
       const targetTop = visual.top;
       const lockW = visual.width;
       const lockH = visual.height;
+      const mini = isMini();
 
       undockForDrag();
-      lockFloatedSize(panel, lockW, lockH);
+
+      if (mini) {
+        // Host must shrink to the pill — leftover panel size locks cause the jump.
+        clearYukiSizeLocks(host);
+        host.style.setProperty("width", `${Math.round(lockW)}px`, "important");
+        host.style.setProperty("height", `${Math.round(lockH)}px`, "important");
+        host.style.setProperty("max-width", "none", "important");
+      } else {
+        lockFloatedSize(host.querySelector(".yuki-companion-panel"), lockW, lockH);
+      }
+
       pinHostAt(targetLeft, targetTop);
 
-      // One correction pass after layout settles.
       const after = host.getBoundingClientRect();
       if (Math.abs(after.left - targetLeft) > 0.5 || Math.abs(after.top - targetTop) > 0.5) {
         pinHostAt(targetLeft, targetTop);
@@ -273,7 +313,8 @@
     }
 
     function onPointerDown(clientX, clientY, target) {
-      if (target?.closest?.(".yuki-companion-btn, .yuki-restore-pill, #btn-mute, #btn-hide")) {
+      // Mute/hide buttons only — restore pill is draggable when minimized.
+      if (target?.closest?.(".yuki-companion-btn, #btn-mute, #btn-hide")) {
         return false;
       }
       sx = clientX;
@@ -309,7 +350,6 @@
 
     function onPointerUp() {
       if (didDragThisGesture) {
-        // Swallow the click that browsers fire after a drag.
         suppressCharTap = true;
         setTimeout(() => {
           suppressCharTap = false;
@@ -356,6 +396,7 @@
         return;
       }
       if (e.target === host && host.classList.contains("yuki-mini")) {
+        if (suppressCharTap || didDragThisGesture) return;
         toggleHide();
       }
     });
@@ -547,22 +588,55 @@
     const host = document.querySelector(".yuki-widget-host");
 
     if (!isHidden) {
+      // Capture where Yuki is now so the restore pill stays there (no teleport).
+      const panel = host?.querySelector(".yuki-companion-panel");
+      const anchor = (panel || host)?.getBoundingClientRect?.();
+
       isHidden = true;
       ui.root.classList.remove("yuki-pop");
       ui.root.classList.add("yuki-hidden");
       if (bar) bar.classList.add("is-collapsed");
-      if (host) host.classList.add("yuki-mini");
+      if (host) {
+        // Undock so the pill can float freely (desktop dock would pin it in the aside).
+        if (host.classList.contains("yuki-docked")) {
+          host.classList.remove("yuki-docked");
+          if (host.parentElement !== document.body) document.body.appendChild(host);
+          window.YukiLayout?.setFloated?.(true);
+        }
+        host.classList.add("yuki-mini");
+        // Drop full-panel size locks — they leave a giant invisible box and jump the pill.
+        clearYukiSizeLocks(host);
+      }
       ui.hide?.classList.add("is-hidden-mode");
       if (ui.restore) {
         ui.restore.hidden = false;
         ui.restore.classList.add("is-visible");
       }
+
+      if (host && anchor) {
+        requestAnimationFrame(() => {
+          const pill = ui.restore?.getBoundingClientRect?.();
+          const w = pill?.width || 120;
+          const h = pill?.height || 44;
+          host.style.setProperty("width", `${Math.round(w)}px`, "important");
+          host.style.setProperty("height", `${Math.round(h)}px`, "important");
+          // Keep the pill where Yuki was (top-left of her frame) — no teleport.
+          const left = Math.max(0, Math.min(window.innerWidth - w, anchor.left));
+          const top = Math.max(0, Math.min(window.innerHeight - h, anchor.top));
+          pinYukiHost(host, left, top);
+        });
+      }
+
       startTalkPrompt();
     } else {
       isHidden = false;
       ui.root.classList.remove("yuki-hidden");
       if (bar) bar.classList.remove("is-collapsed");
-      if (host) host.classList.remove("yuki-mini");
+      if (host) {
+        host.classList.remove("yuki-mini");
+        // Keep left/top; clear mini pill sizing so the panel can expand again.
+        clearYukiSizeLocks(host);
+      }
       ui.hide?.classList.remove("is-hidden-mode");
       if (ui.restore) {
         ui.restore.hidden = true;
@@ -975,7 +1049,7 @@
     ui.charWrap.classList.add("yuki-avatar-3d-loading");
     const modelUrl = getAvatarModelUrl();
     const framing = "compact";
-    import(`/js/yuki-avatar-3d.js?v=3`)
+    import(`/js/yuki-avatar-3d.js?v=4`)
       .then(({ mountYukiAvatar3D }) => mountYukiAvatar3D(ui.charWrap, { modelUrl, framing }))
       .then((avatar) => {
         window.YukiAvatar3D = avatar;

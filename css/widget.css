@@ -373,6 +373,10 @@ body.yuki-overlay-mode .yuki-widget-host.yuki-mini .yuki-restore-pill {
   pointer-events: auto;
 }
 
+.yuki-widget-host.is-dragging .yuki-restore-pill {
+  cursor: grabbing;
+}
+
 /* Restore pill — always available after hide */
 .yuki-restore-pill {
   display: none;
@@ -388,7 +392,8 @@ body.yuki-overlay-mode .yuki-widget-host.yuki-mini .yuki-restore-pill {
   font-size: 13px;
   font-weight: 650;
   letter-spacing: 0.01em;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
