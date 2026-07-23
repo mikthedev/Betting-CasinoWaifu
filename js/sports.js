@@ -985,11 +985,11 @@
       : "They want your best pick on screen.";
 
     sendBetFlowContext(
-      `Player asked for a voice pick (${strategy}). ${rejectLine}${strategyNote} ` +
-      `Visible roster: ${visibleNames}. ` +
-      `Reply in under 15 words. Start with "How about [full roster name]" — e.g. "How about Daniil Medvedev for 25". ` +
-      `Player and stake (10/25/50/100) both appear in the preview banner. Slip stays HIDDEN until user confirms. ` +
-      `Never say thought, thinking, or reasoning — speak the name directly.`,
+      `Voice pick (${strategy}). ${rejectLine}${strategyNote} ` +
+      `Visible: ${visibleNames}. ` +
+      `Reply FAST. First words MUST be "How about [exact roster team name]". ` +
+      `Then ONE short football reason (star or style). No odds-first. No certainty. Under 18 words. ` +
+      `Do NOT mention any other team name in this reply — only the one pick.`,
       { includeOddsInSummary: false, forceResponse: true }
     );
   }
@@ -1175,12 +1175,36 @@
       m.players.map(p => `${p.fullName}: ${teamStars(p).map(s => s.name).join(", ")}`).join("; ")
     ).join(" | ");
 
+    // Compact dossiers (one line each) — full prose only for the pending/suggested team.
+    const compactDossiers = MATCHES.flatMap((m) =>
+      m.players.map((p) => {
+        const k = window.YukiTeamKnowledge?.getTeamKnowledge?.(p.id);
+        if (!k) return null;
+        return `${p.fullName}: ${k.nickname}; stars — ${k.starsWhy.split(";")[0] || k.starsWhy}; edge — ${k.edge}`;
+      })
+    ).filter(Boolean).join(" | ");
+
+    const focusTeam = state.yuki_suggestion?.player
+      || state.bet_slip?.player
+      || null;
+    let focusDossier = "";
+    if (focusTeam) {
+      const team = MATCHES.flatMap((m) => m.players).find(
+        (p) => p.fullName === focusTeam || p.name === focusTeam
+      );
+      const full = team && window.YukiTeamKnowledge?.formatTeamDossier?.(team);
+      if (full) focusDossier = `FOCUS TEAM DOSSIER: ${full}. `;
+    }
+
     const roster =
       "FULL DEMO ROSTER — World Cup 2026 Round of 16 teams only (never invent off-list nations): " +
       `${tourSummaries}. ` +
-      "View filters: All matches, Live only (West/East are labeled on the bracket tree). " +
-      "STAR PLAYERS Yuki knows well (use for insight when recommending a TEAM bet — bets are on teams, not individuals): " +
+      "STAR PLAYERS: " +
       `${starBook}. ` +
+      (compactDossiers ? `TEAM SNAPSHOTS: ${compactDossiers}. ` : "") +
+      focusDossier +
+      "ADVISER RULE: NEVER claim certainty. Lead with team/stars lore; odds secondary. " +
+      "On WHY questions, use TEAM SNAPSHOTS / FOCUS TEAM DOSSIER (2–4 short sentences). " +
       "When a filter is active, ONLY discuss teams listed under CURRENT SCREEN.";
 
     return `${screen}\n${roster}`;
@@ -1912,7 +1936,9 @@
       "SUPPORTED: World Cup 2026 Round of 16 TEAM match-winner betting; bracket filters (Full / West / East / Live); voice picks (best/underdog/favorite/switch); stakes 10/25/50/100; THREE-PHASE bet setup (suggest → stake → confirm → slip opens); tap PLACE BET or voice-delegated place after on-screen consent; scroll to roster team; mute/hide Yuki.\n" +
       "NOT SUPPORTED: parlays, cash out, custom stakes, nations off the R16 roster, general chat / companionship off betting, registration/accounts, voice bet placement WITHOUT consent modal, O/U or BTTS via voice (UI tabs only). You are a BET HELPER only — never invite casual conversation.\n" +
       "LOSSES: Respond empathetically and respectfully. Never laugh at, mock, or use sarcasm after a loss. Acknowledge briefly; focus on next available options (another team, stake, bracket side).\n" +
-      "CAPABILITIES: Discuss visible R16 matches, recommend roster TEAMS (you know their star players well — Messi, Mbappé, Vinícius, Kane, Bellingham, Yamal, Ronaldo, etc.), prepare bet slips, set stake by voice, guide to PLACE BET. " +
+      "CAPABILITIES: Discuss visible R16 matches, recommend roster TEAMS using TEAM DOSSIERS (style, star players, edge/risk), prepare bet slips, set stake by voice, guide to PLACE BET. " +
+      "You are a football betting ADVISER — helpful opinions based on team knowledge, NEVER certainty about who will win. " +
+      "When they ask WHY you suggested a team (e.g. \"why France?\"), answer from dossiers: nickname, style, key stars and what they do, plus a clear edge — odds are secondary. " +
       "Trust CURRENT SCREEN system messages for what is visible NOW — when a bracket filter is active, ONLY discuss teams on that filter. " +
       "BET SETUP WORKFLOW (3 phases — follow exactly):\n" +
       "Phase 1 SUGGEST: You name a roster TEAM → app highlights them. Bet slip stays HIDDEN. Ask stake only (10, 25, 50, 100).\n" +
@@ -2456,14 +2482,16 @@
 
   function resolvePlayerFromYukiSpeech(text) {
     const clean = normalizeYukiSpeechText(text);
+    // Cue wins always — "How about England. Brazil can be tough" must stay England.
     const fromCue = findPlayerAfterSuggestionCue(clean);
     if (fromCue) return fromCue;
 
     const mentions = findAllPlayerMentions(clean).filter((m) => !isNegatedMention(clean, m));
     if (mentions.length === 1) return mentions[0];
-    if (mentions.length > 1) return pickBestMention(clean, mentions);
+    // Multiple teams mentioned with no cue → do NOT guess (avoids wrong highlight).
+    if (mentions.length > 1) return null;
 
-    return fuzzyFindPlayer(clean, { suggestion: true });
+    return null;
   }
 
   function absorbYukiSpeechSuggestion(text) {
@@ -2472,7 +2500,9 @@
 
     const suggestedStake = parseYukiSuggestedStake(clean);
     const fromCue = findPlayerAfterSuggestionCue(clean);
-    const found = fromCue || resolvePlayerFromYukiSpeech(clean);
+    // While awaiting a pick, ONLY trust an explicit suggestion cue — never fuzzy leftovers.
+    const found = fromCue
+      || (isAwaitingYukiPickSpeech() ? null : resolvePlayerFromYukiSpeech(clean));
     const t = clean.toLowerCase();
 
     // Stake-only follow-up while a Yuki suggestion is on screen
@@ -2498,6 +2528,16 @@
       || isYukiSuggestionSpeech(clean)
       || /\b(odds|value|underdog|favorite|favourite|back him|back her|my money|take|like|love|solid|strong|character|player|chips?|stake|wager)\b/.test(t);
     if (!pickContext) return;
+
+    // If she already suggested a team via cue, only switch on a NEW cue (self-correct).
+    if (
+      !cuedPick
+      && yukiPendingPlayer
+      && yukiPendingMatch
+      && (awaitingPick || yukiFlowState === "awaiting_stake" || yukiFlowState === "awaiting_confirm")
+    ) {
+      return;
+    }
 
     const match = MATCHES.find(m => m.id === found.matchId);
     const player = match?.players.find(p => p.id === found.playerId);
@@ -2735,25 +2775,43 @@
   }
 
   const PICK_CUE_RE =
-    /\b(?:how about|what about|go with|let'?s go with|suggest(?:ing)?|recommend(?:ing)?|pick(?:ing)?|bet on|try(?:ing)?|i'?d go with|i would go with|i'?d say|i'?d pick|i'?d take|i'?d back|my pick(?: is| would be)?|fancy|want to back|let'?s try|back|take|choose|want|like)\s+([a-z][a-z\s.'-]{2,45}?)(?=\s+(?:at|for|in|with|over|instead|vs|versus|—|–|-|,|\.|!|\?)|$)/gi;
+    /\b(?:how about|what about|go with|let'?s go with|suggest(?:ing)?|recommend(?:ing)?|pick(?:ing)?|bet on|try(?:ing)?|i'?d go with|i would go with|i'?d say|i'?d pick|i'?d take|i'?d back|my pick(?: is| would be)?|fancy|want to back|let'?s try|i mean|actually|no[, ]+(?:wait[, ]+)?|rather)\s+/gi;
+
+  /** Pull only the team name right after a suggestion cue — never the rest of the sentence. */
+  function extractCuedTeamPhrase(text, cueEndIndex) {
+    const rest = (text || "").slice(cueEndIndex);
+    // Stop at punctuation / conjunctions / comparison words so "England. Brazil…" stays England.
+    const m = rest.match(
+      /^\s*([a-z][a-z]*(?:\s+[a-z][a-z]*){0,3}?)(?=\s*(?:[.,!?;:—–-]|at\b|for\b|in\b|with\b|over\b|instead\b|vs\b|versus\b|they\b|who\b|because\b|since\b|and\b|but\b|or\b|$))/i
+    );
+    return m ? m[1].trim() : "";
+  }
 
   function findPlayerInSegment(segment) {
     if (!segment || segment.length < 3) return null;
 
+    // Prefer exact / alias hits inside this short phrase only.
     const mentions = findAllPlayerMentions(segment);
-    if (mentions.length) return pickBestMention(segment, mentions);
+    if (mentions.length === 1) return mentions[0];
+    if (mentions.length > 1) {
+      // If the segment is just a team phrase, take the earliest (usually the only real pick).
+      return mentions[0];
+    }
 
     const compact = segment.replace(/\s+/g, "");
     let best = null;
     let bestDist = Infinity;
     MATCHES.forEach(m => {
       m.players.forEach(p => {
-        const last = p.fullName.split(" ").pop().toLowerCase();
-        const dist = levenshtein(compact, last);
-        const maxDist = last.length >= 9 ? 3 : last.length >= 6 ? 2 : 1;
-        if (dist <= maxDist && dist < bestDist) {
-          bestDist = dist;
-          best = { matchId: m.id, playerId: p.id };
+        const candidates = [p.id, p.name.toLowerCase(), p.fullName.toLowerCase().replace(/\s+/g, "")];
+        for (const c of candidates) {
+          if (c.length < 3) continue;
+          const dist = levenshtein(compact, c);
+          const maxDist = c.length >= 9 ? 2 : c.length >= 6 ? 1 : 0;
+          if (dist <= maxDist && dist < bestDist) {
+            bestDist = dist;
+            best = { matchId: m.id, playerId: p.id };
+          }
         }
       });
     });
@@ -2762,13 +2820,17 @@
 
   function findPlayerAfterSuggestionCue(text) {
     const t = (text || "").toLowerCase();
-    let m;
     PICK_CUE_RE.lastIndex = 0;
+    let m;
+    let lastFound = null;
+    // Prefer the LAST cue so self-corrections ("Brazil… how about England") win.
     while ((m = PICK_CUE_RE.exec(t))) {
-      const found = findPlayerInSegment(m[1].trim());
-      if (found) return found;
+      const phrase = extractCuedTeamPhrase(t, m.index + m[0].length);
+      if (!phrase) continue;
+      const found = findPlayerInSegment(phrase);
+      if (found) lastFound = found;
     }
-    return null;
+    return lastFound;
   }
 
   function findSuggestedPlayer(text) {
@@ -2913,11 +2975,19 @@
           rank: p.rank,
           perf: Math.round(p.perf),
           stars: teamStars(p).map(s => s.name),
+          knowledge: window.YukiTeamKnowledge?.getTeamKnowledge?.(p.id) || null,
         })),
       })),
       player_names: MATCHES.flatMap(m => m.players.map(p => p.fullName)),
       star_players: MATCHES.flatMap(m =>
         m.players.flatMap(p => teamStars(p).map(star => ({ team: p.fullName, name: star.name, perf: star.perf })))
+      ),
+      team_dossiers: MATCHES.flatMap(m =>
+        m.players.map(p => ({
+          team_id: p.id,
+          full_name: p.fullName,
+          ...(window.YukiTeamKnowledge?.getTeamKnowledge?.(p.id) || {}),
+        }))
       ),
     };
   }
@@ -3034,23 +3104,26 @@
     window.Voice?.cancelPendingResponse?.();
     sendVoicePickContext(text, { strategy });
 
-    const prompt = strategy === "switch"
-      ? "They want a different player — name one clearly on screen."
-      : strategy === "underdog"
-      ? "Who is the best underdog bet on screen right now? Name one player clearly."
-      : strategy === "favorite"
-      ? "Who is the strongest favorite on screen? Name one player clearly."
-      : "Who is your best World Cup Round of 16 pick on screen right now? Name one TEAM clearly.";
+    // Skip text-router when voice is live — it only adds latency and never drives the UI.
+    if (!window.Voice?.isConnected?.()) {
+      const prompt = strategy === "switch"
+        ? "They want a different player — name one clearly on screen."
+        : strategy === "underdog"
+        ? "Who is the best underdog bet on screen right now? Name one player clearly."
+        : strategy === "favorite"
+        ? "Who is the strongest favorite on screen? Name one player clearly."
+        : "Who is your best World Cup Round of 16 pick on screen right now? Name one TEAM clearly.";
 
-    askRouter(
-      strategy === "underdog" ? "underdog_pick" : strategy === "switch" ? "switch_player" : "best_pick",
-      prompt,
-      {
-        pick_strategy: strategy,
-        rejected_players: rejected,
-        visible_player_names: getBoardState().visible_player_names,
-      }
-    );
+      askRouter(
+        strategy === "underdog" ? "underdog_pick" : strategy === "switch" ? "switch_player" : "best_pick",
+        prompt,
+        {
+          pick_strategy: strategy,
+          rejected_players: rejected,
+          visible_player_names: getBoardState().visible_player_names,
+        }
+      );
+    }
   }
 
   function handleBestPlayerIntent(text) {

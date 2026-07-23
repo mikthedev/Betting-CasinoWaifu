@@ -35,11 +35,11 @@ window.YUKI_CONFIG = {
     postSpeechListenMs: 6500,
     postSpeechListenMsPerWord: 50,
     postSpeechListenMsMax: 24000,
-    outcomeVoiceCooldownMs: 4000,
-    outcomeVoiceDeferMs: 1000,
-    outcomeVoicePendingMaxMs: 12000,
-    outcomeUserSpeechOverlapMs: 3500,
-    outcomeAgentSpeechOverlapMs: 2500,
+    outcomeVoiceCooldownMs: 1200,
+    outcomeVoiceDeferMs: 180,
+    outcomeVoicePendingMaxMs: 6000,
+    outcomeUserSpeechOverlapMs: 1200,
+    outcomeAgentSpeechOverlapMs: 800,
     agentResponseWaitMs: 50000,
   },
 
@@ -83,5 +83,6 @@ window.YUKI_CONFIG = {
 
   // Yuki overlay — bet helper only (not a general chat companion)
   MODE: "overlay",
-  AUTO_VOICE: true,
+  // false = wait for tap on Yuki before connecting mic / greeting
+  AUTO_VOICE: false,
 };

@@ -18,6 +18,7 @@ import {
   pipeSseResponse,
   routerChatFetch,
 } from "../lib/inworld-router.mjs";
+import { mintInworldJwt } from "../lib/inworld-jwt.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -344,7 +345,7 @@ server.on("upgrade", (req, socket, head) => {
   });
 });
 
-wss.on("connection", (clientWs) => {
+wss.on("connection", async (clientWs) => {
   if (!INWORLD_API_KEY) {
     clientWs.send(
       JSON.stringify({
@@ -352,20 +353,29 @@ wss.on("connection", (clientWs) => {
         error: { message: "INWORLD_API_KEY is not configured on the server." },
       })
     );
-    clientWs.close(1011, "missing-api-key");
+    safeClose(clientWs, 1011, "missing-api-key");
     return;
   }
 
-  const sessionKey = `voice-${Date.now()}`;
+  let authHeader = `Basic ${INWORLD_API_KEY}`;
+  try {
+    const jwt = await mintInworldJwt();
+    if (jwt?.token) authHeader = `Bearer ${jwt.token}`;
+  } catch (err) {
+    console.warn("[proxy] JWT mint failed, falling back to Basic:", err.message);
+  }
+
+  const sessionKey = `voice-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const upstreamUrl = `${INWORLD_WS_BASE}?key=${encodeURIComponent(sessionKey)}&protocol=realtime`;
 
   const upstream = new WebSocket(upstreamUrl, {
     headers: {
-      Authorization: `Basic ${INWORLD_API_KEY}`,
+      Authorization: authHeader,
     },
   });
 
   let upstreamOpen = false;
+  let closed = false;
   const pending = [];
 
   const forwardToUpstream = (text) => {
@@ -374,6 +384,18 @@ wss.on("connection", (clientWs) => {
     } else {
       pending.push(text);
     }
+  };
+
+  const failClient = (message) => {
+    if (closed) return;
+    closed = true;
+    if (clientWs.readyState === WebSocket.OPEN) {
+      try {
+        clientWs.send(JSON.stringify({ type: "error", error: { message } }));
+      } catch (_) {}
+    }
+    safeClose(clientWs, 1011, "upstream-error");
+    safeClose(upstream, 1000, "proxy-done");
   };
 
   upstream.on("open", () => {
@@ -386,16 +408,26 @@ wss.on("connection", (clientWs) => {
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(text);
   });
 
+  upstream.on("unexpected-response", (_req, res) => {
+    const status = res?.statusCode || 0;
+    console.error("[proxy] upstream HTTP", status);
+    failClient(
+      status === 401 || status === 403
+        ? `Inworld auth failed (${status}) — check INWORLD_API_KEY`
+        : `Inworld rejected connection (${status || "error"})`
+    );
+  });
+
   upstream.on("error", (err) => {
     console.error("[proxy] upstream error:", err.message);
-    if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.send(JSON.stringify({ type: "error", error: { message: err.message } }));
-    }
+    failClient(err.message || "Upstream voice error");
   });
 
   upstream.on("close", (code, reason) => {
+    if (closed) return;
+    closed = true;
     if (clientWs.readyState === WebSocket.OPEN) {
-      clientWs.close(code || 1000, reason.toString());
+      safeClose(clientWs, code, reason?.toString?.() || "upstream-closed");
     }
   });
 
@@ -405,16 +437,36 @@ wss.on("connection", (clientWs) => {
   });
 
   clientWs.on("close", () => {
-    if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) {
-      upstream.close();
-    }
+    closed = true;
+    safeClose(upstream, 1000, "client-closed");
   });
 
   clientWs.on("error", (err) => {
     console.error("[proxy] client error:", err.message);
-    upstream.close();
+    closed = true;
+    safeClose(upstream, 1000, "client-error");
   });
 });
+
+/** ws.close() throws if code is not a valid WebSocket close code (e.g. HTTP 401). */
+function safeClose(socket, code, reason) {
+  if (!socket) return;
+  const state = socket.readyState;
+  if (state !== WebSocket.OPEN && state !== WebSocket.CONNECTING) return;
+  const n = Number(code);
+  const valid = n === 1000 || (n >= 3000 && n <= 4999);
+  try {
+    if (state === WebSocket.CONNECTING) {
+      socket.terminate();
+      return;
+    }
+    socket.close(valid ? n : 1011, String(reason || "").slice(0, 120));
+  } catch (err) {
+    try {
+      socket.terminate();
+    } catch (_) {}
+  }
+}
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Yuki server  http://localhost:${PORT}`);

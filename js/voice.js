@@ -62,6 +62,90 @@
   let scheduledSources = [];
   let nextPlayTime = 0;
 
+  // Lip-sync (Inworld TTS phoneme timestamps → 3D visemes) — ported from Interactive CasinoWaifu
+  const avatar3dEnabled = !!cfg.AVATAR_3D;
+  let lipSyncPhones = [];
+  let utterancePlaybackAnchor = 0;
+  let utterancePlaybackEnd = 0;
+  let utteranceClockActive = false;
+  let lipSyncPhoneOffset = 0;
+  let lipSyncLastPhoneEnd = 0;
+  let webrtcLipSyncAnchor = null;
+  let lastMouthViseme = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
+  let playbackAnalyser = null;
+  const LIPSYNC_LEAD_SEC = 0.058;
+  const MOUTH_CAPS = { aa: 1.0, ee: 0.72, ih: 0.68, oh: 0.78, ou: 0.62 };
+
+  function visemeToMouthBlend(viseme, strength) {
+    const v = (viseme || "").toLowerCase();
+    const s = Math.max(0, Math.min(1, strength));
+    const w = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
+    if (v === "a") w.aa = s * 1.22;
+    else if (v === "e" || v === "aei") { w.ee = s * 0.72; w.ih = s * 0.08; }
+    else if (v === "ee") w.ee = s * 0.76;
+    else if (v === "i") w.ih = s * 0.74;
+    else if (v === "o") w.oh = s * 0.74;
+    else if (v === "u") w.ou = s * 0.62;
+    else if (v === "w" || v === "qw") w.ou = s * 0.44;
+    else if (v === "r") { w.oh = s * 0.28; w.ou = s * 0.12; }
+    else if (v === "bmp") w.ih = s * 0.11;
+    else if (v === "fv") w.ee = s * 0.16;
+    else if (v === "l" || v === "th" || v === "y") w.ih = s * 0.26;
+    else w.ih = s * 0.2;
+    return w;
+  }
+
+  function smoothstepViseme(t) {
+    const x = Math.max(0, Math.min(1, t));
+    return x * x * (3 - 2 * x);
+  }
+
+  function mergeMouthBlend(a, b, t) {
+    const out = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
+    const u = smoothstepViseme(t);
+    for (const k of Object.keys(out)) out[k] = (a[k] || 0) * (1 - u) + (b[k] || 0) * u;
+    return out;
+  }
+
+  function addMouthBlend(dst, src) {
+    for (const k of Object.keys(dst)) dst[k] += src[k] || 0;
+  }
+
+  function clampMouthBlend(raw) {
+    if (raw.aa > 0.18 && raw.oh > 0.12) {
+      const total = raw.aa + raw.oh;
+      raw.aa = (raw.aa / total) * Math.min(total, 0.95);
+      raw.oh = (raw.oh / total) * Math.min(total, 0.95);
+    }
+    if (raw.ou > 0.1 && raw.oh > 0.1) raw.oh *= 0.4;
+    if (raw.aa > 0.2 && raw.ee > 0.1) raw.ee *= 0.5;
+    if (raw.aa > 0.2 && raw.ou > 0.1) raw.ou *= 0.55;
+    for (const k of Object.keys(MOUTH_CAPS)) raw[k] = Math.min(raw[k] || 0, MOUTH_CAPS[k]);
+    return raw;
+  }
+
+  function visemeStrengthScale(viseme) {
+    const v = (viseme || "").toLowerCase();
+    if (v === "a") return 1.12;
+    if (v === "e" || v === "ee" || v === "aei") return 1.0;
+    if (v === "i") return 1.02;
+    if (v === "o") return 0.98;
+    if (v === "u") return 0.92;
+    if (v === "bmp" || v === "fv") return 0.45;
+    return 0.58;
+  }
+
+  function phoneTimingWindow(viseme) {
+    const v = (viseme || "").toLowerCase();
+    if (v === "a") return { lead: 0.055, trail: 0.08, peak: 1.05 };
+    if (v === "e" || v === "ee" || v === "aei") return { lead: 0.05, trail: 0.09, peak: 0.72 };
+    if (v === "i") return { lead: 0.045, trail: 0.085, peak: 0.7 };
+    if (v === "o") return { lead: 0.05, trail: 0.09, peak: 0.66 };
+    if (v === "u") return { lead: 0.045, trail: 0.095, peak: 0.58 };
+    if (v === "bmp") return { lead: 0.025, trail: 0.035, peak: 0.4 };
+    return { lead: 0.032, trail: 0.05, peak: 0.54 };
+  }
+
   // Deferred speaking-stop for WebSocket path
   let speakingStopTimer = null;
 
@@ -205,8 +289,9 @@
       clearPendingOutcome();
       return;
     }
-    if (isActiveVoiceExchange() || isAgentAudioPending()) {
-      armPendingOutcomeFlush(800);
+    // Only wait on live mic / live agent audio — not post-speech listen grace.
+    if (userSpeaking || agentSpeaking || isWsPlaybackPending() || isWaitingForAgentReply()) {
+      armPendingOutcomeFlush(250);
       return;
     }
     const { type, payload } = pendingOutcome;
@@ -745,16 +830,18 @@
     const host = window.location.hostname;
     const pagePort = window.location.port ? Number(window.location.port) : null;
 
-    // Preview servers (8123, 5500, etc.) serve static files only — voice proxy is on REALTIME.port
+    // Static-only preview servers — voice proxy stays on REALTIME.port (npm start).
+    // Any other local port (incl. alternate PORT=) is same-origin static+WS.
     const local =
       host === "localhost" ||
       host === "127.0.0.1" ||
       host === "[::1]" ||
       /^192\.168\./.test(host) ||
       /^10\./.test(host);
-    const onVoicePort = pagePort === voicePort || pagePort === 80 || pagePort === 443;
+    const previewPorts = new Set([5500, 5501, 8123, 5173, 4173, 3000, 3001, 8080, 8081]);
+    const onPreviewPort = !!(pagePort && previewPorts.has(pagePort));
 
-    if (local && pagePort && !onVoicePort) {
+    if (local && onPreviewPort) {
       return `${proto}//${host}:${voicePort}/realtime`;
     }
 
@@ -775,11 +862,11 @@
     const voicePort = Number(cfg.REALTIME?.port) || 8787;
     const host = window.location.hostname;
     const pagePort = window.location.port ? Number(window.location.port) : null;
-    const voiceOnSameHost =
-      !pagePort || pagePort === voicePort || pagePort === 80 || pagePort === 443;
-    const base = voiceOnSameHost
-      ? `${window.location.protocol}//${window.location.host}`
-      : `${window.location.protocol}//${host}:${voicePort}`;
+    const previewPorts = new Set([5500, 5501, 8123, 5173, 4173, 3000, 3001, 8080, 8081]);
+    const onPreviewPort = !!(pagePort && previewPorts.has(pagePort));
+    const base = onPreviewPort
+      ? `${window.location.protocol}//${host}:${voicePort}`
+      : `${window.location.protocol}//${window.location.host}`;
     return `${base}/health`;
   }
 
@@ -1084,7 +1171,7 @@
         break;
 
       case "session.created":
-        sendJson(window.YUKI_SESSION_UPDATE || buildDefaultSessionUpdate());
+        sendJson(buildSessionUpdatePayload());
         break;
 
       case "session.updated":
@@ -1121,6 +1208,7 @@
 
       case "response.created":
         currentResponseText = "";
+        resetUtteranceLipSync();
         if (transport === "webrtc") {
           emit("voice:thinking:start");
           startWebRTCLevelWatcher();
@@ -1128,7 +1216,20 @@
         break;
 
       case "response.output_audio.delta":
-        if (transport === "webrtc") break;
+        if (transport === "webrtc") {
+          if (msg.timestamp_info) ingestTimestampInfo(msg.timestamp_info);
+          if (lipSyncPhones.length) {
+            ensureWebRTCLipSyncClock(false);
+            if (!agentSpeaking) {
+              agentSpeaking = true;
+              webrtcAgentTalking = true;
+              emit("voice:thinking:stop");
+              emit("voice:speaking:start");
+            }
+          }
+          break;
+        }
+        ingestTimestampInfo(msg.timestamp_info);
         if (!agentSpeaking) {
           agentSpeaking = true;
           currentResponseText = "";
@@ -1138,6 +1239,7 @@
         }
         const audioB64 = msg.delta || msg.audio;
         if (!muted && audioB64) playAudioDelta(audioB64);
+        else if (!audioB64 && msg.timestamp_info) ingestTimestampInfo(msg.timestamp_info);
         break;
 
       case "response.output_audio_transcript.delta":
@@ -1150,7 +1252,22 @@
           }
           const midSentiment = detectSentiment(currentResponseText);
           if (midSentiment) emit("voice:sentiment", { emotion: midSentiment, midResponse: true });
+          if (transport === "webrtc" && msg.timestamp_info) {
+            ingestTimestampInfo(msg.timestamp_info);
+            if (!agentSpeaking && lipSyncPhones.length) {
+              agentSpeaking = true;
+              webrtcAgentTalking = true;
+              ensureWebRTCLipSyncClock(false);
+              emit("voice:thinking:stop");
+              emit("voice:speaking:start");
+            }
+          }
         }
+        break;
+
+      case "response.output_audio_transcript.done":
+      case "response.output_audio.done":
+        if (msg.timestamp_info) ingestTimestampInfo(msg.timestamp_info);
         break;
 
       case "response.done": {
@@ -1205,14 +1322,8 @@
 
   function maybeStartConversation() {
     if (!sessionReady || greetingSent) return;
-    const autoCasino = cfg.MODE !== "companion" && cfg.AUTO_VOICE !== false;
-    if (cfg.MODE === "companion") {
-      if (!micStream || !audioUnlocked) return;
-    } else if (autoCasino) {
-      if (!micStream && !audioUnlocked) return;
-    } else {
-      return;
-    }
+    // Companion + tap-to-start overlay both need mic unlocked after a user gesture.
+    if (!micStream || !audioUnlocked) return;
     greetingSent = true;
     promptGreeting();
   }
@@ -1354,8 +1465,16 @@
     playbackCtx = playbackCtx || new Ctx({ latencyHint: "playback" });
 
     try {
-      if (captureCtx.state === "suspended") await captureCtx.resume();
-      if (playbackCtx.state === "suspended") await playbackCtx.resume();
+      const resumes = [];
+      if (captureCtx.state === "suspended") resumes.push(captureCtx.resume());
+      if (playbackCtx.state === "suspended") resumes.push(playbackCtx.resume());
+      // Without a user gesture, resume() can hang forever — don't block voice boot.
+      if (resumes.length) {
+        await Promise.race([
+          Promise.all(resumes),
+          new Promise((resolve) => setTimeout(resolve, 120)),
+        ]);
+      }
       audioUnlocked = captureCtx.state === "running" || playbackCtx.state === "running";
       maybeStartConversation();
       return audioUnlocked;
@@ -1631,6 +1750,210 @@
     emit("voice:level", { level: 0 });
   }
 
+  function buildSessionUpdatePayload() {
+    const base = window.YUKI_SESSION_UPDATE || buildDefaultSessionUpdate();
+    const update = JSON.parse(JSON.stringify(base));
+    if (avatar3dEnabled) {
+      update.session.providerData = update.session.providerData || {};
+      update.session.providerData.tts = {
+        timestamp_type: "WORD",
+        timestamp_transport_strategy: "SYNC",
+      };
+    }
+    return update;
+  }
+
+  function resetUtteranceLipSync() {
+    lipSyncPhones = [];
+    utteranceClockActive = false;
+    utterancePlaybackAnchor = 0;
+    utterancePlaybackEnd = 0;
+    lipSyncPhoneOffset = 0;
+    lipSyncLastPhoneEnd = 0;
+    webrtcLipSyncAnchor = null;
+    lastMouthViseme = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
+  }
+
+  function ensureWebRTCLipSyncClock(forceNewAnchor = false) {
+    if (transport !== "webrtc" || !avatar3dEnabled) return;
+    if (!playbackCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) playbackCtx = new Ctx({ latencyHint: "playback" });
+    }
+    if (!playbackCtx) return;
+    if (playbackCtx.state === "suspended") playbackCtx.resume().catch(() => {});
+    if (forceNewAnchor || !utteranceClockActive) {
+      utterancePlaybackAnchor = playbackCtx.currentTime;
+      utteranceClockActive = true;
+      webrtcLipSyncAnchor = utterancePlaybackAnchor;
+    }
+    webrtcAgentTalking = true;
+  }
+
+  function getLipSyncTime() {
+    if (utteranceClockActive && playbackCtx) {
+      return Math.max(0, playbackCtx.currentTime - utterancePlaybackAnchor + LIPSYNC_LEAD_SEC);
+    }
+    return 0;
+  }
+
+  function lipSyncTailSeconds() {
+    return lipSyncLastPhoneEnd + 0.28;
+  }
+
+  function isWithinLipSyncTail() {
+    return lipSyncPhones.length > 0 && getLipSyncTime() <= lipSyncTailSeconds();
+  }
+
+  function ensurePlaybackAnalyser(ctx) {
+    if (!ctx || playbackAnalyser) return;
+    const out = ensureVoiceOutput(ctx);
+    if (!out) return;
+    playbackAnalyser = ctx.createAnalyser();
+    playbackAnalyser.fftSize = 256;
+    out.connect(playbackAnalyser);
+  }
+
+  function isAgentAudioPlaying() {
+    if (transport === "webrtc" && webrtcAgentTalking && remoteAudioEl && !remoteAudioEl.paused) {
+      return true;
+    }
+    if (!playbackCtx) return false;
+    if (scheduledSources.length > 0) return true;
+    if (!utteranceClockActive) return false;
+    return playbackCtx.currentTime < utterancePlaybackEnd + 0.08;
+  }
+
+  function ingestTimestampInfo(timestampInfo) {
+    if (!avatar3dEnabled || !timestampInfo) return;
+    const align = timestampInfo.word_alignment || timestampInfo.wordAlignment;
+    if (!align) return;
+    const details = align.phonetic_details || align.phoneticDetails || [];
+    const batch = [];
+    for (const detail of details) {
+      for (const phone of detail.phones || []) {
+        const viseme = String(phone.viseme_symbol || phone.visemeSymbol || "").toLowerCase();
+        const start = phone.start_time_seconds ?? phone.startTimeSeconds ?? 0;
+        const dur = phone.duration_seconds ?? phone.durationSeconds ?? 0;
+        if (!viseme || viseme === "[silence]") continue;
+        batch.push({ viseme, start, end: start + dur });
+      }
+    }
+    if (!batch.length) return;
+
+    batch.sort((a, b) => a.start - b.start);
+    const firstBatch = !lipSyncPhones.length;
+    if (lipSyncPhones.length && batch[0].start < 0.12) {
+      lipSyncPhoneOffset = lipSyncLastPhoneEnd;
+    } else if (firstBatch) {
+      lipSyncPhoneOffset = 0;
+    }
+    for (const p of batch) {
+      const start = p.start + lipSyncPhoneOffset;
+      const end = p.end + lipSyncPhoneOffset;
+      lipSyncPhones.push({ viseme: p.viseme, start, end });
+      lipSyncLastPhoneEnd = Math.max(lipSyncLastPhoneEnd, end);
+    }
+    lipSyncPhones.sort((a, b) => a.start - b.start);
+    if (transport === "webrtc") {
+      ensureWebRTCLipSyncClock(firstBatch);
+      if (!agentSpeaking) {
+        agentSpeaking = true;
+        webrtcAgentTalking = true;
+        emit("voice:thinking:stop");
+        emit("voice:speaking:start");
+      }
+    }
+  }
+
+  function lipSyncClockReady() {
+    if (!avatar3dEnabled) return false;
+    if (playbackCtx) return true;
+    return transport === "webrtc" && !!remoteAudioEl;
+  }
+
+  function getVisemeWeights() {
+    if (!lipSyncClockReady()) return null;
+    if (transport === "webrtc" && lipSyncPhones.length && !utteranceClockActive) {
+      ensureWebRTCLipSyncClock(true);
+    }
+    const lipSyncLive =
+      utteranceClockActive ||
+      isAgentAudioPlaying() ||
+      isWithinLipSyncTail() ||
+      (lipSyncPhones.length > 0 && (agentSpeaking || webrtcAgentTalking));
+    if (!lipSyncLive) {
+      for (const k of Object.keys(lastMouthViseme)) lastMouthViseme[k] *= 0.78;
+      const tail = mouthOpenAmount(lastMouthViseme);
+      return tail > 0.008 ? { ...lastMouthViseme } : null;
+    }
+
+    const t = getLipSyncTime();
+    const raw = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
+    let bilabialClosure = 0;
+
+    for (let i = 0; i < lipSyncPhones.length; i++) {
+      const phone = lipSyncPhones[i];
+      const viseme = phone.viseme;
+      const win = phoneTimingWindow(viseme);
+      const dur = Math.max(0.028, phone.end - phone.start);
+      const mid = (phone.start + phone.end) * 0.5;
+      const scale = visemeStrengthScale(viseme);
+
+      if (t >= phone.start - win.lead && t <= phone.end + win.trail) {
+        const edgeIn = smoothstepViseme((t - (phone.start - win.lead)) / Math.max(0.04, win.lead));
+        const edgeOut = smoothstepViseme(((phone.end + win.trail) - t) / Math.max(0.045, win.trail));
+        const env = edgeIn * edgeOut;
+        const center = 1 - Math.min(1, Math.abs(t - mid) / (dur * 0.62));
+        const strength = (0.2 + center * win.peak) * env * scale;
+        addMouthBlend(raw, visemeToMouthBlend(viseme, strength));
+        if (viseme === "bmp") {
+          bilabialClosure = Math.max(bilabialClosure, env * Math.max(0, center));
+        }
+      }
+
+      const next = lipSyncPhones[i + 1];
+      if (next && t >= phone.end - 0.06 && t <= next.start + 0.06) {
+        const gap = Math.max(0.04, (next.start + 0.06) - (phone.end - 0.06));
+        const blendT = (t - (phone.end - 0.06)) / gap;
+        const s1 = visemeStrengthScale(viseme) * 0.42;
+        const s2 = visemeStrengthScale(next.viseme) * 0.42;
+        addMouthBlend(
+          raw,
+          mergeMouthBlend(
+            visemeToMouthBlend(viseme, s1),
+            visemeToMouthBlend(next.viseme, s2),
+            blendT,
+          ),
+        );
+      }
+    }
+
+    clampMouthBlend(raw);
+    if (bilabialClosure > 0) {
+      const shut = 1 - 0.75 * Math.min(1, bilabialClosure);
+      for (const k of Object.keys(raw)) raw[k] *= shut;
+    }
+
+    const attack = 0.58;
+    const release = 0.30;
+    let total = 0;
+    for (const k of Object.keys(raw)) {
+      const tgt = raw[k];
+      const cur = lastMouthViseme[k];
+      const smooth = tgt > cur ? attack : release;
+      lastMouthViseme[k] = cur * (1 - smooth) + tgt * smooth;
+      total += lastMouthViseme[k];
+    }
+
+    if (total < 0.008) return null;
+    return { ...lastMouthViseme };
+  }
+
+  function mouthOpenAmount(weights) {
+    return (weights.aa || 0) + (weights.ih || 0) + (weights.ou || 0) + (weights.ee || 0) + (weights.oh || 0);
+  }
+
   // ---------------------------------------------------------------------------
   // Agent audio playback (PCM16 24kHz mono)
   // ---------------------------------------------------------------------------
@@ -1682,8 +2005,14 @@
 
     const now = playbackCtx.currentTime;
     if (nextPlayTime < now) nextPlayTime = now + 0.02;
+    if (!utteranceClockActive) {
+      utterancePlaybackAnchor = nextPlayTime;
+      utteranceClockActive = true;
+    }
     src.start(nextPlayTime);
     nextPlayTime += buffer.duration;
+    utterancePlaybackEnd = nextPlayTime;
+    ensurePlaybackAnalyser(playbackCtx);
     scheduledSources.push(src);
     src.onended = () => {
       scheduledSources = scheduledSources.filter((s) => s !== src);
@@ -1696,6 +2025,7 @@
     });
     scheduledSources = [];
     nextPlayTime = 0;
+    resetUtteranceLipSync();
     if (speakingStopTimer) {
       clearTimeout(speakingStopTimer);
       speakingStopTimer = null;
@@ -1767,13 +2097,13 @@
     const inConvo = opts.inConversation ?? isInConversation();
     const huge = opts.huge ?? isHugeEvent(type);
     const lines = {
-      WIN:  `System: Tennis bet WON — +${payload.amount || payload.net || "?"} credits on ${payload.player || "their pick"} (${payload.tournament || "tennis"} @ ${payload.odds ?? "?"}).`,
-      LOSE: `System: Tennis bet LOST — −${payload.amount || payload.chip || "?"} credits on ${payload.player || "their pick"} (${payload.tournament || "tennis"} @ ${payload.odds ?? "?"}). The user's pick was ${payload.player || "unknown"} — use this exact name. Respond empathetically; never laugh, mock, or use sarcasm.`,
-      IDLE: `System: The player is browsing tennis matches.`,
+      WIN:  `System: World Cup bet WON — +${payload.amount || payload.net || "?"} on ${payload.player || "their pick"} (${payload.tournament || "World Cup"} @ ${payload.odds ?? "?"}).`,
+      LOSE: `System: World Cup bet LOST — −${payload.amount || payload.chip || "?"} on ${payload.player || "their pick"} (${payload.tournament || "World Cup"} @ ${payload.odds ?? "?"}). The user's pick was ${payload.player || "unknown"} — use this exact name. Respond empathetically; never laugh, mock, or use sarcasm.`,
+      IDLE: `System: The player is browsing World Cup matches.`,
     };
     let text = lines[type] || `System: Betting event ${type}.`;
     if (priorityOutcome) {
-      text += " React now with one short spoken line — this is the bet result the user is waiting for.";
+      text += " React NOW with one short spoken line — the user just saw the bet result.";
     } else if (inConvo && !huge && OUTCOME_EVENTS.has(type)) {
       text = `Background note (DO NOT mention now — keep the current conversation going naturally): ${text}`;
     } else if (inConvo && AMBIENT_EVENTS.has(type)) {
@@ -1794,21 +2124,29 @@
     if (!isTransportOpen() || !sessionReady || muted) return false;
 
     const priorityOutcome = isPriorityOutcome(type);
+    const team = payload.player || "their pick";
     const winTone = " Stay bright and encouraging — one short line.";
-    const lossTone = " Be empathetic and respectful — acknowledge the loss briefly, no laughing, no mockery, no sarcasm. Offer a next step (another pick, stake, or tab). One short line.";
+    const lossTone = " Be empathetic and respectful — acknowledge the loss briefly, no laughing, no mockery, no sarcasm. Offer a next step (another pick, stake, or bracket side). One short line.";
 
     const prompts = {
-      WIN:  `[Tennis bet win! +${payload.amount || payload.net} on ${payload.player || "their pick"}. Brief happy hype — one short line!]${winTone}`,
-      LOSE: `[Tennis bet loss — ${payload.player || "their pick"} lost, −${payload.amount || payload.chip}. Use the exact player name ${payload.player || "they picked"}.]${lossTone}`,
+      WIN:
+        `[World Cup bet WON! +${payload.amount || payload.net || "?"} on ${team}. ` +
+        `Say something like: "Congratulations on your bet — want to keep supporting the teams?" ` +
+        `One short happy line, then invite another pick.]${winTone}`,
+      LOSE:
+        `[World Cup bet loss — ${team} lost, −${payload.amount || payload.chip || "?"}. ` +
+        `Use the exact team name ${team}. Brief empathy + offer another pick.]${lossTone}`,
     };
     const text = prompts[type];
     if (!text) return false;
 
     lastOutcomeVoiceAt = Date.now();
+    // Clear listen locks so the next turn isn't blocked by the previous line.
+    lastAgentAudibleUntil = 0;
     return injectUserPrompt(text, { priority: priorityOutcome });
   }
 
-  /** When voice is live, Yuki speaks a brief reaction — queues win/loss if busy. */
+  /** When voice is live, Yuki speaks a brief reaction — queues win/loss only if mic is busy. */
   function reactToGameEvent(type, payload = {}) {
     if (!isTransportOpen() || !sessionReady) return false;
     if (muted) return false;
@@ -1834,12 +2172,15 @@
     if (isDeepConversation() && inConvo && !huge && !priorityOutcome) return false;
 
     if (priorityOutcome) {
-      if (userSpeaking || isAgentAudioPending() || activeExchange) {
-        schedulePendingOutcome(type, payload);
-        return false;
+      // User just placed a bet — congratulate/commiserate immediately.
+      clearPendingOutcome();
+      if (agentSpeaking || isWaitingForAgentReply() || isWsPlaybackPending()) {
+        interruptPlayback();
+        cancelPendingResponse();
       }
-      const now = Date.now();
-      if (now - lastOutcomeVoiceAt < outcomeVoiceCooldownMs()) {
+      lastAgentAudibleUntil = 0;
+      lastAgentSpeechEndAt = 0;
+      if (userSpeaking) {
         schedulePendingOutcome(type, payload);
         return false;
       }
@@ -1975,5 +2316,7 @@
     requestMic,
     setVoiceVolume,
     getVoiceVolume,
+    getVisemeWeights,
+    isAgentAudioPlaying,
   };
 })();

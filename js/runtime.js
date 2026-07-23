@@ -45,5 +45,9 @@ window.YUKI_isHosted = function yukiIsHosted() {
 
 window.YUKI_isVoiceConfigured = function yukiIsVoiceConfigured() {
   const rt = window.YUKI_RUNTIME || {};
-  return rt.mode === "webrtc" || rt.mode === "proxy" || !!(rt.wsUrl || rt.voiceBackendUrl || rt.voiceBackend);
+  if (rt.mode === "webrtc" || rt.mode === "proxy" || !!(rt.wsUrl || rt.voiceBackendUrl || rt.voiceBackend)) {
+    return true;
+  }
+  // Local `npm start` serves same-origin /realtime — treat as configured.
+  return yukiIsLocalHost() && location.protocol.startsWith("http");
 };

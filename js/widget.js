@@ -312,6 +312,9 @@
       suppressCharTap = true;
     }
 
+    let gestureOnChar = false;
+    let activePointerId = null;
+
     function onPointerDown(clientX, clientY, target) {
       // Mute/hide buttons only — restore pill is draggable when minimized.
       if (target?.closest?.(".yuki-companion-btn, #btn-mute, #btn-hide")) {
@@ -324,6 +327,8 @@
       st = r.top;
       dragging = false;
       didDragThisGesture = false;
+      // Capture only after drag starts — capturing on the host steals click from #yuki-char-wrap.
+      gestureOnChar = !!target?.closest?.("#yuki-char-wrap, .yuki-tap-target");
       return true;
     }
 
@@ -333,6 +338,10 @@
         const dy = clientY - sy;
         if (Math.abs(dx) <= THRESH && Math.abs(dy) <= THRESH) return;
         beginDrag(clientX, clientY);
+        // Capture only once dragging so the host keeps receiving moves off-element.
+        if (activePointerId != null) {
+          try { host.setPointerCapture?.(activePointerId); } catch (_) {}
+        }
         e?.preventDefault?.();
         return;
       }
@@ -349,7 +358,9 @@
     }
 
     function onPointerUp() {
-      if (didDragThisGesture) {
+      const wasDrag = didDragThisGesture;
+      const wasCharTap = gestureOnChar && !wasDrag;
+      if (wasDrag) {
         suppressCharTap = true;
         setTimeout(() => {
           suppressCharTap = false;
@@ -357,7 +368,16 @@
         }, 80);
       }
       dragging = false;
+      gestureOnChar = false;
+      activePointerId = null;
       host.classList.remove("is-dragging");
+      // Start voice on a clean char tap. (Host pointer-capture used to retarget click away from the button.)
+      if (wasCharTap && !isCompanion) {
+        onCharTap();
+        // Ignore the synthetic click that follows pointerup.
+        suppressCharTap = true;
+        setTimeout(() => { suppressCharTap = false; }, 80);
+      }
     }
 
     host.addEventListener("touchstart", e => {
@@ -376,9 +396,7 @@
     host.addEventListener("pointerdown", e => {
       if (e.pointerType === "touch") return;
       if (!onPointerDown(e.clientX, e.clientY, e.target)) return;
-      try {
-        host.setPointerCapture?.(e.pointerId);
-      } catch (_) {}
+      activePointerId = e.pointerId;
       const move = ev => onPointerMove(ev.clientX, ev.clientY, ev);
       const up = () => {
         onPointerUp();
@@ -411,11 +429,9 @@
       startCompanionIdle();
     } else {
       setEmotion(E.IDLE);
-      if (autoVoice && !userMuted) {
-        initCasinoVoice();
-        checkVoiceAvailability();
-        startBettingIdle();
-      }
+      if (ui.charWrap) ui.charWrap.title = "Tap Yuki to talk";
+      startBettingIdle();
+      checkVoiceAvailability();
     }
   }
 
@@ -458,23 +474,34 @@
     try {
       await window.Voice.ensureRuntimeConfig();
       const result = await window.Voice.tryAutoStart();
-      voiceActive = true;
       reconnectAttempt = 0;
-      document.body.classList.add("voice-live");
 
-      if (result.mic) {
-        micEnabled = true;
-        if (ui.charWrap) ui.charWrap.title = "Talking with Yuki";
-        if (!isHidden && !inGameReaction()) setEmotion(E.LISTENING);
+      if (result.connected) {
+        voiceActive = true;
+        document.body.classList.add("voice-live");
+        if (result.mic) {
+          micEnabled = true;
+          if (ui.charWrap) ui.charWrap.title = "Talking with Yuki";
+          if (!isHidden && !inGameReaction()) setEmotion(E.LISTENING);
+        } else if (result.needsGesture) {
+          bindMicOnFirstGesture();
+          if (ui.charWrap) ui.charWrap.title = "Tap Yuki to talk";
+          if (!isHidden && !inGameReaction()) setEmotion(E.HAPPY);
+        } else if (ui.charWrap) {
+          ui.charWrap.title = "Talking with Yuki";
+        }
       } else if (result.needsGesture) {
         bindMicOnFirstGesture();
         if (ui.charWrap) ui.charWrap.title = "Tap Yuki to talk";
         if (!isHidden && !inGameReaction()) setEmotion(E.HAPPY);
-      } else if (ui.charWrap) {
-        ui.charWrap.title = "Talking with Yuki";
+      } else {
+        if (ui.charWrap) ui.charWrap.title = "Tap Yuki to talk";
+        if (!isHidden && !inGameReaction()) setEmotion(E.IDLE);
       }
     } catch (err) {
       console.warn("[Widget] voice init failed:", err);
+      if (ui.charWrap) ui.charWrap.title = "Tap Yuki to talk";
+      if (!isHidden && !inGameReaction()) setEmotion(E.IDLE);
       scheduleReconnect();
     } finally {
       connecting = false;
@@ -489,6 +516,8 @@
   }
 
   // ── Character tap (click only — not after a drag) ─────────────────────────────
+  let charTapInFlight = false;
+
   async function onCharTap() {
     if (suppressCharTap || didDragThisGesture) {
       suppressCharTap = false;
@@ -496,7 +525,9 @@
       return;
     }
     // Voice activation — click/tap on Yuki only
-    if (isHidden || userMuted || connecting) return;
+    if (isHidden || userMuted || charTapInFlight) return;
+
+    charTapInFlight = true;
     connecting = true;
     setEmotion(E.LISTENING);
     try {
@@ -524,6 +555,8 @@
         toast("Allow mic: click lock icon in address bar → Microphone", "info", 5500);
       } else if (msg.includes("INWORLD_API_KEY") || msg.includes("not configured")) {
         toast("Add INWORLD_API_KEY on Vercel → redeploy", "info", 6000);
+      } else if (msg.includes("auth failed") || msg.includes("401") || msg.includes("403")) {
+        toast("Voice auth failed — check INWORLD_API_KEY in .env", "info", 7000);
       } else if (msg.includes("unreachable") || msg.includes("WebRTC") || msg.includes("Inworld")) {
         toast(msg.length > 70 ? msg.slice(0, 68) + "…" : msg, "info", 6000);
       } else {
@@ -531,6 +564,7 @@
       }
     } finally {
       connecting = false;
+      charTapInFlight = false;
     }
   }
 
@@ -818,7 +852,9 @@
     });
 
     bus.on("voice:connecting", () => {
-      if (connecting && !isHidden && !inGameReaction()) setEmotion(E.THINKING);
+      // Keep "listening" if the user just tapped — don't flash thinking over it.
+      if (charTapInFlight || isHidden || inGameReaction()) return;
+      if (connecting) setEmotion(E.THINKING);
     });
     bus.on("voice:ready", () => {
       connecting = false; voiceActive = true; reconnectAttempt = 0;
